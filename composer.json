@@ -1,0 +1,42 @@
+{
+  "name": "codeinc/google-oauth2-middleware",
+  "version": "1.0.0",
+  "description": "A PSR-15 middleware managing Google OAuth2 authentication using JSON web tokens",
+  "homepage": "https://github.com/CodeIncHQ/GoogleOauth2Middleware",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=7.1",
+    "psr/http-message": "^1.0",
+    "psr/http-server-middleware": "^1.0",
+    "psr/http-server-handler": "^1.0",
+    "hansott/psr7-cookies": "^1.0",
+    "google/apiclient": "^2.0",
+    "firebase/php-jwt": "^5.0",
+    "codeinc/psr7-responses": "^1.1",
+    "codeinc/url": "^1.4"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^7",
+    "codeinc/psr7-response-sender": "^1.0"
+  },
+  "autoload": {
+    "psr-4": {"CodeInc\\GoogleOauth2Middleware\\": "src/"}
+  },
+  "autoload-dev": {
+    "psr-4": { "CodeInc\\GoogleOauth2Middleware\\Tests\\": "tests/" }
+  },
+  "authors": [
+    {
+      "name": "Joan Fabrégat",
+      "email": "joan@codeinc.fr",
+      "homepage": "https://www.codeinc.fr",
+      "role": "developer"
+    }
+  ],
+  "config": {
+    "preferred-install": {
+      "*": "dist"
+    }
+  }
+}
