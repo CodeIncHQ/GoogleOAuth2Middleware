@@ -1,6 +1,6 @@
 # Google OAuth 2 Middleware
 
-`GoogleOAuth2Middleware` is a [PSR-15](https://www.php-fig.org/psr/psr-15/) middleware written in PHP 7 intended to manage Google OAuth2 authentication using JSON web tokens. The web tokens are generated and read by the [firebase/php-jwt](https://github.com/firebase/php-jwt) library.
+`GoogleOAuth2Middleware` is a [PSR-15](https://www.php-fig.org/psr/psr-15/) middleware written in PHP 7 intended to manage Google OAuth2 authentication using JSON web tokens. The JSON web tokens are generated and read by the [firebase/php-jwt](https://github.com/firebase/php-jwt) library.
 
 The authentication informations are stored in a JSON web token save in a cookie called `__auth` (by default). 
 
