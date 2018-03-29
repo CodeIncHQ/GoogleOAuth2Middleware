@@ -4,7 +4,7 @@
 
 The authentication informations are stored in a JSON web token save in a cookie called `__auth` (by default). 
 
-Once the user is authenticated, either when receiving an auth code from Google or using the auth cookie, the user informations are made available in a request attribute called `auth` (by default).
+Once the user is authenticated, either when receiving an auth code from Google or using the auth cookie, the user informations are made available in an attribute of the [PSR-7](https://www.php-fig.org/psr/psr-7/) request the called `auth` (by default).
 
 You can disconnect the current user by sending a PSR-7 response implementing [`LogoutResponseInterface`](src/Responses/LogoutResponseInterface.php).
 
