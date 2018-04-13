@@ -16,63 +16,63 @@
 //
 // Author:   Joan Fabrégat <joan@codeinc.fr>
 // Date:     13/04/2018
-// Time:     17:37
+// Time:     17:42
 // Project:  GoogleOauth2Middleware
 //
 declare(strict_types=1);
-namespace CodeInc\GoogleOAuth2Middleware\UserValidators;
+namespace CodeInc\GoogleOAuth2Middleware\Validators\Users;
 
 /**
- * Class EmailDomainValidator
+ * Class EmailAddressesValidator
  *
- * @package CodeInc\GoogleOAuth2Middleware\UserValidators
+ * @package CodeInc\GoogleOAuth2Middleware\Validators\Users
  * @author Joan Fabrégat <joan@codeinc.fr>
  */
-class EmailDomainValidator implements UserValidatorInterface
+class EmailAddressesValidator implements UserValidatorInterface
 {
     /**
      * @var string[]
      */
-    private $allowedDomains = [];
+    private $allowedAddresses = [];
 
     /**
-     * DomainValidator constructor.
+     * EmailAddressesValidator constructor.
      *
-     * @param string|string[]|null $allowedDomains
+     * @param string|string[]|null $allowedAddresses
      */
-    public function __construct($allowedDomains = null)
+    public function __construct($allowedAddresses)
     {
-        if (is_array($allowedDomains)) {
-            foreach ($allowedDomains as $allowedDomain) {
-                $this->addAllowedDomain($allowedDomain);
+        if (is_array($allowedAddresses)) {
+            foreach ($allowedAddresses as $allowedAddress) {
+                $this->addAllowedAddress($allowedAddress);
             }
         }
-        elseif (is_string($allowedDomains)) {
-            $this->addAllowedDomain($allowedDomains);
+        elseif (is_string($allowedAddresses)) {
+            $this->addAllowedAddress($allowedAddresses);
         }
     }
 
     /**
-     * Adds an allowed domain.
+     * Adds an allowed email address.
      *
-     * @param string $allowedDomain
+     * @param string $allowedAddress
      */
-    public function addAllowedDomain(string $allowedDomain):void
+    public function addAllowedAddress(string $allowedAddress):void
     {
-        $allowedDomain = strtolower($allowedDomain);
-        if (!in_array($allowedDomain, $this->allowedDomains)) {
-            $this->allowedDomains[] = $allowedDomain;
+        $allowedAddress = strtolower($allowedAddress);
+        if (!in_array($allowedAddress, $this->allowedAddresses)) {
+            $this->allowedAddresses[] = $allowedAddress;
         }
     }
 
     /**
-     * Returns all the allowed domains.
+     * Returns the allowed addresses.
      *
      * @return string[]
      */
-    public function getAllowedDomains():array
+    public function getAllowedAddresses():array
     {
-        return $this->allowedDomains;
+        return $this->allowedAddresses;
     }
 
     /**
@@ -82,8 +82,6 @@ class EmailDomainValidator implements UserValidatorInterface
      */
     public function validateUser(\Google_Service_Oauth2_Userinfoplus $userInfos):bool
     {
-        return $userInfos->getVerifiedEmail()
-            && preg_match('/@(.+)$/u', $userInfos->getEmail(), $matches)
-            && in_array(strtolower($matches[1]), $this->allowedDomains);
+        return $userInfos->getVerifiedEmail() && in_array(strtolower($userInfos->getEmail()), $this->allowedAddresses);
     }
 }

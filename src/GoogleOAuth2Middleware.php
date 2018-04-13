@@ -21,9 +21,9 @@
 //
 declare(strict_types=1);
 namespace CodeInc\GoogleOAuth2Middleware;
-use CodeInc\GoogleOAuth2Middleware\PublicRequestValidators\PublicRequestValidatorInterface;
+use CodeInc\GoogleOAuth2Middleware\Validators\PublicRequests\PublicRequestValidatorInterface;
 use CodeInc\GoogleOAuth2Middleware\Responses\LogoutResponseInterface;
-use CodeInc\GoogleOAuth2Middleware\UserValidators\UserValidatorInterface;
+use CodeInc\GoogleOAuth2Middleware\Validators\Users\UserValidatorInterface;
 use CodeInc\Psr7Responses\RedirectResponse;
 use CodeInc\Psr7Responses\UnauthorizedResponse;
 use CodeInc\Url\Url;

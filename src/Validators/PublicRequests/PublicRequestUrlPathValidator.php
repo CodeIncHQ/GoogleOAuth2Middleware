@@ -20,17 +20,17 @@
 // Project:  GoogleOauth2Middleware
 //
 declare(strict_types=1);
-namespace CodeInc\GoogleOAuth2Middleware\PublicRequestValidators;
+namespace CodeInc\GoogleOAuth2Middleware\Validators\PublicRequests;
 use Psr\Http\Message\ServerRequestInterface;
 
 
 /**
- * Class UrlPathValidator
+ * Class PublicRequestUrlPathValidator
  *
- * @package CodeInc\GoogleOAuth2Middleware\PublicRequestValidators
+ * @package CodeInc\GoogleOAuth2Middleware\Validators\PublicRequests
  * @author Joan Fabrégat <joan@codeinc.fr>
  */
-class UrlPathValidator implements PublicRequestValidatorInterface
+class PublicRequestUrlPathValidator implements PublicRequestValidatorInterface
 {
     /**
      * @var string[]

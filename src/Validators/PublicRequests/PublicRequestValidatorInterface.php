@@ -16,25 +16,27 @@
 //
 // Author:   Joan Fabrégat <joan@codeinc.fr>
 // Date:     13/04/2018
-// Time:     17:35
+// Time:     18:09
 // Project:  GoogleOauth2Middleware
 //
 declare(strict_types=1);
-namespace CodeInc\GoogleOAuth2Middleware\UserValidators;
+namespace CodeInc\GoogleOAuth2Middleware\Validators\PublicRequests;
+use Psr\Http\Message\ServerRequestInterface;
+
 
 /**
- * Interface UserValidatorInterface
+ * Interface PublicRequestValidatorInterface
  *
- * @package CodeInc\GoogleOAuth2Middleware
+ * @package CodeInc\GoogleOAuth2Middleware\Validators\PublicRequests
  * @author Joan Fabrégat <joan@codeinc.fr>
  */
-interface UserValidatorInterface
+interface PublicRequestValidatorInterface
 {
     /**
-     * Validates the authentification of the user.
+     * Validates if a request is public.
      *
-     * @param \Google_Service_Oauth2_Userinfoplus $userInfos
+     * @param ServerRequestInterface $request
      * @return bool
      */
-    public function validateUser(\Google_Service_Oauth2_Userinfoplus $userInfos):bool;
+    public function isRequestPublic(ServerRequestInterface $request):bool;
 }
