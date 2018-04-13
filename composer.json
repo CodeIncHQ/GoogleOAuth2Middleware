@@ -13,7 +13,7 @@
     "hansott/psr7-cookies": "^1.0",
     "google/apiclient": "^2.0",
     "firebase/php-jwt": "^5.0",
-    "codeinc/psr7-responses": "^1.1",
+    "codeinc/psr7-responses": "^1.2",
     "codeinc/url": "^1.4"
   },
   "require-dev": {
