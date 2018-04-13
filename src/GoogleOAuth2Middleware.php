@@ -144,7 +144,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      *
      * @var string
      */
-    private $oauthRedirectUri;
+    private $oauthCallbackUri;
 
     /**
      * App version added to the JSON web token to limit the session to the current version of the app.
@@ -172,16 +172,16 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      *
      * @param \Google_Client $googleClient
      * @param string $jwtKey
-     * @param string $oauthRedirectUri
+     * @param string $oauthCallbackUri
      * @param \DateInterval|null $authExpire
      */
-    public function __construct(\Google_Client $googleClient, string $jwtKey, string $oauthRedirectUri,
+    public function __construct(\Google_Client $googleClient, string $jwtKey, string $oauthCallbackUri,
         ?\DateInterval $authExpire = null)
     {
         $this->googleClient = $googleClient;
-        $this->googleClient->setRedirectUri($oauthRedirectUri);
+        $this->googleClient->setRedirectUri($oauthCallbackUri);
         $this->jwtKey = $jwtKey;
-        $this->oauthRedirectUri = $oauthRedirectUri;
+        $this->oauthCallbackUri = $oauthCallbackUri;
         $this->authExpire = $authExpire ?? \DateInterval::createFromDateString(self::DEFAULT_AUTH_EXPIRE);
     }
 
@@ -241,8 +241,8 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
         RequestHandlerInterface $handler):?ResponseInterface
     {
         // checking the request
-        $oauthRedirectUri = new Url($this->oauthRedirectUri);
-        if ($request->getUri()->getPath() == $oauthRedirectUri->getPath()
+        $oauthCallbackUri = new Url($this->oauthCallbackUri);
+        if ($request->getUri()->getPath() == $oauthCallbackUri->getPath()
             && isset($request->getQueryParams()["code"])) {
 
             // loading the Google user infos
@@ -703,8 +703,8 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * @return string
      */
-    public function getOauthRedirectUri():string
+    public function getOauthCallbackUri():string
     {
-        return $this->oauthRedirectUri;
+        return $this->oauthCallbackUri;
     }
 }
