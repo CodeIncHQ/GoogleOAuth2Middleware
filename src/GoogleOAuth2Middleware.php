@@ -21,8 +21,11 @@
 //
 declare(strict_types=1);
 namespace CodeInc\GoogleOAuth2Middleware;
+use CodeInc\GoogleOAuth2Middleware\PublicRequestValidators\PublicRequestValidator;
 use CodeInc\GoogleOAuth2Middleware\Responses\LogoutResponseInterface;
+use CodeInc\GoogleOAuth2Middleware\UserValidators\UserValidatorInterface;
 use CodeInc\Psr7Responses\RedirectResponse;
+use CodeInc\Psr7Responses\UnauthorizedResponse;
 use CodeInc\Url\Url;
 use Firebase\JWT\JWT;
 use HansOtt\PSR7Cookies\SetCookie;
@@ -53,18 +56,8 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     const DEFAULT_REQUEST_ATTR_NAME = 'auth';
 
     /**
-     * Publis URLs path
-     *
-     * @see GoogleOAuth2Middleware::addPublicPath()
-     * @var array
-     */
-    private $publicPaths = [];
-
-    /**
      * Name of the auth cookie
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieName()
-     * @see GoogleOAuth2Middleware::getAuthCookieName()
      * @var string
      */
     private $authCookieName = self::DEFAULT_AUTH_COOKIE_NAME;
@@ -72,8 +65,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies domain
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieDomain()
-     * @see GoogleOAuth2Middleware::getAuthCookieDomain()
      * @var string|null
      */
     private $authCookieDomain;
@@ -81,8 +72,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies path.
      *
-     * @see GoogleOAuth2Middleware::setAuthCookiePath()
-     * @see GoogleOAuth2Middleware::getAuthCookiePath()
      * @var string|null
      */
     private $authCookiePath;
@@ -90,9 +79,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies secure.
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieSecure()
-     * @see GoogleOAuth2Middleware::getAuthCookieSecure()
-     * @see GoogleOAuth2Middleware::DEFAULT_AUTH_COOKIE_SECURE
      * @var bool
      */
     private $authCookieSecure = self::DEFAULT_AUTH_COOKIE_SECURE;
@@ -100,9 +86,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies HTTP only.
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieHttpOnly()
-     * @see GoogleOAuth2Middleware::getAuthCookieHttpOnly()
-     * @see GoogleOAuth2Middleware::DEFAULT_AUTH_COOKIE_HTTP_ONLY
      * @var bool
      */
     private $authCookieHttpOnly = self::DEFAULT_AUTH_COOKIE_HTTP_ONLY;
@@ -110,8 +93,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Auth expire.
      *
-     * @see GoogleOAuth2Middleware::setAuthExpire()
-     * @see GoogleOAuth2Middleware::getAuthExpire()
      * @var \DateInterval
      */
     private $authExpire;
@@ -119,8 +100,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      *JSON web token encryption key.
      *
-     * @see GoogleOAuth2Middleware::__construct()
-     * @see GoogleOAuth2Middleware::getJwtKey()
      * @var string
      */
     private $jwtKey;
@@ -128,9 +107,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * JSON web token encryption algorithme.
      *
-     * @see GoogleOAuth2Middleware::setJwtAlgo()
-     * @see GoogleOAuth2Middleware::getJwtAlgo()
-     * @see GoogleOAuth2Middleware::DEFAULT_JWT_ALGO
      * @var string
      */
     private $jwtAlgo = self::DEFAULT_JWT_ALGO;
@@ -138,21 +114,23 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Attribute name added to the PSR-7 request object for the authentication infos.
      *
-     * @see GoogleOAuth2Middleware::setRequestAttrName()
-     * @see GoogleOAuth2Middleware::getRequestAttrName()
-     * @see GoogleOAuth2Middleware::DEFAULT_REQUEST_ATTR_NAME
      * @var string
      */
     private $requestAttrName = self::DEFAULT_REQUEST_ATTR_NAME;
 
     /**
-     * PSR-7 RequestHandler for unauthenticated requests.
+     * PSR-15 RequestHandler for unauthenticated requests.
      *
-     * @see GoogleOAuth2Middleware::setUnauthenticatedRequestHandler()
-     * @see GoogleOAuth2Middleware::getUnauthenticatedRequestHandler()
      * @var RequestHandlerInterface|null
      */
     private $unauthenticatedRequestHandler;
+
+    /**
+     * PSR-15 RequestHandler for oauth callback requests.
+     *
+     * @var RequestHandlerInterface|null
+     */
+    private $oauthCallbackRequestHandler;
 
     /**
      * Google API client.
@@ -163,25 +141,48 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private $googleClient;
 
     /**
+     * OAuth2 redirect URI (the one receiving the "code" parameter)
+     *
+     * @var string
+     */
+    private $oauthCallbackUri;
+
+    /**
      * App version added to the JSON web token to limit the session to the current version of the app.
      *
-     * @see GoogleOAuth2Middleware::setAppVersion()
-     * @see GoogleOAuth2Middleware::getAppVersion()
      * @var string
      */
     private $appVersion;
+
+    /**
+     * User validators.
+     *
+     * @var UserValidatorInterface[]
+     */
+    private $userValidators = [];
+
+    /**
+     * Public PSR-7 requests validators.
+     *
+     * @var PublicRequestValidator[]
+     */
+    private $publicRequestValidators = [];
 
     /**
      * GoogleOAuth2Middleware constructor.
      *
      * @param \Google_Client $googleClient
      * @param string $jwtKey
+     * @param string $oauthCallbackUri
      * @param \DateInterval|null $authExpire
      */
-    public function __construct(\Google_Client $googleClient, string $jwtKey, ?\DateInterval $authExpire = null)
+    public function __construct(\Google_Client $googleClient, string $jwtKey, string $oauthCallbackUri,
+        ?\DateInterval $authExpire = null)
     {
         $this->googleClient = $googleClient;
+        $this->googleClient->setRedirectUri($oauthCallbackUri);
         $this->jwtKey = $jwtKey;
+        $this->oauthCallbackUri = $oauthCallbackUri;
         $this->authExpire = $authExpire ?? \DateInterval::createFromDateString(self::DEFAULT_AUTH_EXPIRE);
     }
 
@@ -193,65 +194,153 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler):ResponseInterface
     {
-        /*
-         * Public requests
-         */
+        // Public requests
+        if ($response = $this->processPublicRequests($request, $handler)) {
+            return $response;
+        }
+
+        // Google oauth requests
+        if ($response = $this->processGoogleOauthRequests($request, $handler)) {
+            return $response;
+        }
+
+        // Authenticated requests
+        if ($response = $this->processAuthenticatedRequests($request, $handler)) {
+            return $response;
+        }
+
+        // Unauthenticated requests
+        return $this->processUnauthenticatedRequests($request);
+    }
+
+    /**
+     * Processes the public requests. Returns the respnse or null if the request is not public.
+     *
+     * @param ServerRequestInterface $request
+     * @param RequestHandlerInterface $handler
+     * @return null|ResponseInterface
+     */
+    private function processPublicRequests(ServerRequestInterface $request,
+        RequestHandlerInterface $handler):?ResponseInterface
+    {
         if ($this->isRequestPublic($request)) {
             return $handler->handle($request);
         }
+        return null;
+    }
 
-        /*
-         * Google auth requests
-         */
-        $googleRedirectUri = new Url($this->googleClient->getRedirectUri());
-        if ($request->getUri()->getPath() == $googleRedirectUri->getPath()
+    /**
+     * Processes the Google OAuth requests. Returns the response if the request is a Google OAuth
+     * request including an authentication code or null of other requests.
+     *
+     * @param ServerRequestInterface $request
+     * @param RequestHandlerInterface $handler
+     * @return null|ResponseInterface
+     * @throws GoogleOAuth2MiddlewareException
+     */
+    private function processGoogleOauthRequests(ServerRequestInterface $request,
+        RequestHandlerInterface $handler):?ResponseInterface
+    {
+        // checking the request
+        $oauthCallbackUri = new Url($this->oauthCallbackUri);
+        if ($request->getUri()->getPath() == $oauthCallbackUri->getPath()
             && isset($request->getQueryParams()["code"])) {
 
-            $authToken = $this->processGoogleAccessCode($request);
+            // loading the Google user infos
+            $googleUserInfos = $this->getGoogleUserInfos($request);
 
+            // validating the user
+            if ($this->validateUser($googleUserInfos)) {
+                return new UnauthorizedResponse();
+            }
+
+            // building the auth token
+            $authToken = $this->buildAuthToken($googleUserInfos);
+
+            // if a specific handler is given for the OAuth callback requests
+            if ($this->oauthCallbackRequestHandler) {
+                $handler = $this->oauthCallbackRequestHandler;
+            }
+
+            // processing the PSR-7 request with the auth token
             $response = $handler->handle(
-                $request->withAttribute($this->getRequestAttrName(), $authToken)
+                $request->withAttribute($this->requestAttrName, $authToken)
             );
+
+            // adding the auth cookie to the PSR-7 response
             if (!$response instanceof LogoutResponseInterface) {
-                $response = $this->addAuthCookie($response, $authToken, $request);
+                $response = $this->getAuthCookie($authToken)->addToResponse($response);
             }
 
             return $response;
         }
+        return null;
+    }
 
-        /*
-         * Authenticated requests
-         */
+    /**
+     * Proesses the authenticated requrests. Returns null if the request does not include the authentication cookie.
+     *
+     * @param ServerRequestInterface $request
+     * @param RequestHandlerInterface $handler
+     * @return null|ResponseInterface
+     */
+    private function processAuthenticatedRequests(ServerRequestInterface $request,
+        RequestHandlerInterface $handler):?ResponseInterface
+    {
         if (($authToken = $this->readAuthCookie($request)) !== null) {
             $response = $handler->handle(
                 $request->withAttribute($this->getRequestAttrName(), $authToken)
             );
             if ($response instanceof LogoutResponseInterface) {
-                $response = $this->deleteAuthCookie($response, $request);
+                $response = $this->getAuthDeleteCookie()->addToResponse($response);
             }
             return $response;
         }
+        return null;
+    }
 
-        /*
-         * Unauthenticated requests
-         */
+    /**
+     * Processes the unauthenticated requests.
+     *
+     * @param ServerRequestInterface $request
+     * @return ResponseInterface
+     */
+    private function processUnauthenticatedRequests(ServerRequestInterface $request):ResponseInterface
+    {
         return $this->unauthenticatedRequestHandler
             ? $this->unauthenticatedRequestHandler->handle($request)
             : new RedirectResponse($this->googleClient->createAuthUrl());
     }
 
     /**
-     * Processes a Google authentication code.
+     * Validates a user using the supplied validators.
      *
-     * @param ServerRequestInterface $request
-     * @return array
-     * @throws GoogleOAuth2MiddlewareException
+     * @param \Google_Service_Oauth2_Userinfoplus $googleUserInfos
+     * @return bool
      */
-    private function processGoogleAccessCode(ServerRequestInterface $request):array
+    private function validateUser(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):bool
     {
-        // loading the Google user infos
-        $googleUserInfos = $this->getGoogleUserInfos($request);
+        if (!empty($this->userValidators)) {
+            foreach ($this->userValidators as $validator) {
+                if ($validator->validateUser($googleUserInfos)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
 
+    /**
+     * Builds the auth token using the user infos fetched via the Google API.
+     *
+     * @param \Google_Service_Oauth2_Userinfoplus $googleUserInfos
+     * @return array
+     */
+    private function buildAuthToken(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):array
+    {
         // building the auth token using Google user infos
         return [
             "googleId" => $googleUserInfos->getId(),
@@ -303,7 +392,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     public function encodeJwt(array $data):string
     {
-        return JWT::encode($data, $this->getJwtKey(), $this->getJwtAlgo());
+        return JWT::encode($data, $this->jwtKey, $this->jwtAlgo);
     }
 
     /**
@@ -332,10 +421,10 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     protected function readAuthCookie(ServerRequestInterface $request):?array
     {
-        if (isset($request->getCookieParams()[$this->getAuthCookieName()])
-            && ($authToken = $this->decodeJwt($request->getCookieParams()[$this->getAuthCookieName()])) !== null
+        if (isset($request->getCookieParams()[$this->authCookieName])
+            && ($authToken = $this->decodeJwt($request->getCookieParams()[$this->authCookieName])) !== null
             && isset($authToken['_expireAt'], $authToken['_appVersion'])
-            && ($this->getAppVersion() === null || $authToken['_appVersion'] == $this->getAppVersion())) {
+            && ($this->appVersion === null || $authToken['_appVersion'] == $this->appVersion)) {
 
             $expireAt = new \DateTime($authToken['_expireAt']);
             if ($expireAt > (new \DateTime('now'))) {
@@ -346,13 +435,10 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param ResponseInterface $response
      * @param array $authToken
-     * @param ServerRequestInterface $request
-     * @return ResponseInterface
+     * @return SetCookie
      */
-    protected function addAuthCookie(ResponseInterface $response, array $authToken,
-        ServerRequestInterface $request):ResponseInterface
+    protected function getAuthCookie(array $authToken):SetCookie
     {
         // computing expiration time
         $expireAt = new \DateTime('now');
@@ -364,31 +450,28 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
 
         // building the cookie
         return SetCookie::thatExpires(
-            $this->getAuthCookieName(),
+            $this->authCookieName,
             $this->encodeJwt($authToken),
             $expireAt,
-            $this->getAuthCookiePath() ?? '',
-            $this->getAuthCookieDomain() ?? '',
-            $this->getAuthCookieSecure(),
-            $this->getAuthCookieHttpOnly()
-        )->addToResponse($response);
+            $this->authCookiePath ?? '',
+            $this->authCookieDomain ?? '',
+            $this->authCookieSecure,
+            $this->authCookieHttpOnly
+        );
     }
 
     /**
-     * @param ResponseInterface $response
-     * @param ServerRequestInterface $request
-     * @return ResponseInterface
+     * @return SetCookie
      */
-    protected function deleteAuthCookie(ResponseInterface $response,
-        ServerRequestInterface $request):ResponseInterface
+    protected function getAuthDeleteCookie():SetCookie
     {
         return SetCookie::thatDeletesCookie(
-            $this->getAuthCookieName(),
-            $this->getAuthCookiePath() ?? '',
-            $this->getAuthCookieDomain() ?? '',
-            $this->getAuthCookieSecure(),
-            $this->getAuthCookieHttpOnly()
-        )->addToResponse($response);
+            $this->authCookieName,
+            $this->authCookiePath ?? '',
+            $this->authCookieDomain ?? '',
+            $this->authCookieSecure,
+            $this->authCookieHttpOnly
+        );
     }
 
     /**
@@ -399,14 +482,8 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     protected function isRequestPublic(ServerRequestInterface $request):bool
     {
-        $publicPaths = $this->getPublicPaths();
-        $requestPath = $request->getUri()->getPath();
-
-        if (in_array($requestPath, $publicPaths)) {
-            return true;
-        }
-        foreach ($publicPaths as $publicPath) {
-            if (fnmatch($publicPath, $requestPath)) {
+        foreach ($this->publicRequestValidators as $publicRequestValidator) {
+            if ($publicRequestValidator->isRequestPublic($request)) {
                 return true;
             }
         }
@@ -439,7 +516,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param string $cookieDomain
+     * @param string $authCookieDomain
      */
     public function setAuthCookieDomain(string $authCookieDomain):void
     {
@@ -463,7 +540,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param bool $cookieHttpOnly
+     * @param bool $authCookieHttpOnly
      */
     public function setAuthCookieHttpOnly(bool $authCookieHttpOnly):void
     {
@@ -479,7 +556,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param bool $cookieSecure
+     * @param bool $authCookieSecure
      */
     public function setAuthCookieSecure(bool $authCookieSecure):void
     {
@@ -487,7 +564,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param string $cookiePath
+     * @param string $authCookiePath
      */
     public function setAuthCookiePath(string $authCookiePath):void
     {
@@ -551,22 +628,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param string $path
-     */
-    public function addPublicPath(string $path):void
-    {
-        $this->publicPaths[] = $path;
-    }
-
-    /**
-     * @return array
-     */
-    public function getPublicPaths():array
-    {
-        return $this->publicPaths;
-    }
-
-    /**
      * @param string $appVersion
      */
     public function setAppVersion(string $appVersion):void
@@ -596,5 +657,61 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function setUnauthenticatedRequestHandler(RequestHandlerInterface $unauthenticatedRequestHandler):void
     {
         $this->unauthenticatedRequestHandler = $unauthenticatedRequestHandler;
+    }
+
+    /**
+     * @return null|RequestHandlerInterface
+     */
+    public function getOauthCallbackRequestHandler():?RequestHandlerInterface
+    {
+        return $this->oauthCallbackRequestHandler;
+    }
+
+    /**
+     * @param RequestHandlerInterface $oauthCallbackRequestHandler
+     */
+    public function setOauthCallbackRequestHandler(RequestHandlerInterface $oauthCallbackRequestHandler):void
+    {
+        $this->oauthCallbackRequestHandler = $oauthCallbackRequestHandler;
+    }
+
+    /**
+     * @param UserValidatorInterface $userValidator
+     */
+    public function addUserValidator(UserValidatorInterface $userValidator):void
+    {
+        $this->userValidators[] = $userValidator;
+    }
+
+    /**
+     * @return UserValidatorInterface[]
+     */
+    public function getUserValidators():array
+    {
+        return $this->userValidators;
+    }
+
+    /**
+     * @param PublicRequestValidator $publicRequestValidator
+     */
+    public function addPublicRequestVaidator(PublicRequestValidator $publicRequestValidator):void
+    {
+        $this->publicRequestValidators[] = $publicRequestValidator;
+    }
+
+    /**
+     * @return PublicRequestValidator[]
+     */
+    public function getPublicRequestValidators():array
+    {
+        return $this->publicRequestValidators;
+    }
+
+    /**
+     * @return string
+     */
+    public function getOauthCallbackUri():string
+    {
+        return $this->oauthCallbackUri;
     }
 }
