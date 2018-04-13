@@ -229,8 +229,8 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * Processes the Google OAuth requests. Returns the response if the request is a Google OAuth request including an
-     * authentication code or null of other requests.
+     * Processes the Google OAuth requests. Returns the response if the request is a Google OAuth
+     * request including an authentication code or null of other requests.
      *
      * @param ServerRequestInterface $request
      * @param RequestHandlerInterface $handler
