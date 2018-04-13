@@ -36,50 +36,140 @@ use Psr\Http\Server\RequestHandlerInterface;
  * Class GoogleOAuth2Middleware
  *
  * @package CodeInc\GoogleOAuth2Middleware
+ * @license MIT
+ * @link https://github.com/CodeIncHQ/GoogleOAuth2Middleware
  * @author Joan Fabrégat <joan@codeinc.fr>
  */
 class GoogleOAuth2Middleware implements MiddlewareInterface
 {
+    // auth cookie default settings
     const DEFAULT_AUTH_COOKIE_NAME = '__auth';
+    const DEFAULT_AUTH_COOKIE_SECURE = false;
+    const DEFAULT_AUTH_COOKIE_HTTP_ONLY = false;
+
+    // other default settings
     const DEFAULT_AUTH_EXPIRE = '30 minutes';
     const DEFAULT_JWT_ALGO = 'HS256'; // see https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-40
     const DEFAULT_REQUEST_ATTR_NAME = 'auth';
 
-    /** @var array */
+    /**
+     * Publis URLs path
+     *
+     * @see GoogleOAuth2Middleware::addPublicPath()
+     * @var array
+     */
     private $publicPaths = [];
 
-    /** @var string */
+    /**
+     * Name of the auth cookie
+     *
+     * @see GoogleOAuth2Middleware::setAuthCookieName()
+     * @see GoogleOAuth2Middleware::getAuthCookieName()
+     * @var string
+     */
     private $authCookieName = self::DEFAULT_AUTH_COOKIE_NAME;
 
-    /** @var string|null */
-    private $cookieDomain;
+    /**
+     * Cookies domain
+     *
+     * @see GoogleOAuth2Middleware::setAuthCookieDomain()
+     * @see GoogleOAuth2Middleware::getAuthCookieDomain()
+     * @var string|null
+     */
+    private $authCookieDomain;
 
-    /** @var string|null */
-    private $cookiePath;
+    /**
+     * Cookies path.
+     *
+     * @see GoogleOAuth2Middleware::setAuthCookiePath()
+     * @see GoogleOAuth2Middleware::getAuthCookiePath()
+     * @var string|null
+     */
+    private $authCookiePath;
 
-    /** @var bool|null */
-    private $cookieSecure;
+    /**
+     * Cookies secure.
+     *
+     * @see GoogleOAuth2Middleware::setAuthCookieSecure()
+     * @see GoogleOAuth2Middleware::getAuthCookieSecure()
+     * @see GoogleOAuth2Middleware::DEFAULT_AUTH_COOKIE_SECURE
+     * @var bool
+     */
+    private $authCookieSecure = self::DEFAULT_AUTH_COOKIE_SECURE;
 
-    /** @var bool|null */
-    private $cookieHttpOnly;
+    /**
+     * Cookies HTTP only.
+     *
+     * @see GoogleOAuth2Middleware::setAuthCookieHttpOnly()
+     * @see GoogleOAuth2Middleware::getAuthCookieHttpOnly()
+     * @see GoogleOAuth2Middleware::DEFAULT_AUTH_COOKIE_HTTP_ONLY
+     * @var bool
+     */
+    private $authCookieHttpOnly = self::DEFAULT_AUTH_COOKIE_HTTP_ONLY;
 
-    /** @var \DateInterval */
+    /**
+     * Auth expire.
+     *
+     * @see GoogleOAuth2Middleware::setAuthExpire()
+     * @see GoogleOAuth2Middleware::getAuthExpire()
+     * @var \DateInterval
+     */
     private $authExpire;
 
-    /** @var string */
+    /**
+     *JSON web token encryption key.
+     *
+     * @see GoogleOAuth2Middleware::__construct()
+     * @see GoogleOAuth2Middleware::getJwtKey()
+     * @var string
+     */
     private $jwtKey;
 
-    /** @var string */
+    /**
+     * JSON web token encryption algorithme.
+     *
+     * @see GoogleOAuth2Middleware::setJwtAlgo()
+     * @see GoogleOAuth2Middleware::getJwtAlgo()
+     * @see GoogleOAuth2Middleware::DEFAULT_JWT_ALGO
+     * @var string
+     */
     private $jwtAlgo = self::DEFAULT_JWT_ALGO;
 
-    /** @var string */
+    /**
+     * Attribute name added to the PSR-7 request object for the authentication infos.
+     *
+     * @see GoogleOAuth2Middleware::setRequestAttrName()
+     * @see GoogleOAuth2Middleware::getRequestAttrName()
+     * @see GoogleOAuth2Middleware::DEFAULT_REQUEST_ATTR_NAME
+     * @var string
+     */
     private $requestAttrName = self::DEFAULT_REQUEST_ATTR_NAME;
 
-    /** @var RequestHandlerInterface|null */
+    /**
+     * PSR-7 RequestHandler for unauthenticated requests.
+     *
+     * @see GoogleOAuth2Middleware::setUnauthenticatedRequestHandler()
+     * @see GoogleOAuth2Middleware::getUnauthenticatedRequestHandler()
+     * @var RequestHandlerInterface|null
+     */
     private $unauthenticatedRequestHandler;
 
-    /** @var \Google_Client */
+    /**
+     * Google API client.
+     *
+     * @link https://github.com/google/google-api-php-client
+     * @var \Google_Client
+     */
     private $googleClient;
+
+    /**
+     * App version added to the JSON web token to limit the session to the current version of the app.
+     *
+     * @see GoogleOAuth2Middleware::setAppVersion()
+     * @see GoogleOAuth2Middleware::getAppVersion()
+     * @var string
+     */
+    private $appVersion;
 
     /**
      * GoogleOAuth2Middleware constructor.
@@ -118,12 +208,14 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
             && isset($request->getQueryParams()["code"])) {
 
             $authToken = $this->processGoogleAccessCode($request);
+
             $response = $handler->handle(
                 $request->withAttribute($this->getRequestAttrName(), $authToken)
             );
             if (!$response instanceof LogoutResponseInterface) {
                 $response = $this->addAuthCookie($response, $authToken, $request);
             }
+
             return $response;
         }
 
@@ -242,9 +334,10 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     {
         if (isset($request->getCookieParams()[$this->getAuthCookieName()])
             && ($authToken = $this->decodeJwt($request->getCookieParams()[$this->getAuthCookieName()])) !== null
-            && isset($authToken['expireAt'])) {
+            && isset($authToken['_expireAt'], $authToken['_appVersion'])
+            && ($this->getAppVersion() === null || $authToken['_appVersion'] == $this->getAppVersion())) {
 
-            $expireAt = new \DateTime($authToken['expireAt']);
+            $expireAt = new \DateTime($authToken['_expireAt']);
             if ($expireAt > (new \DateTime('now'))) {
                 return $authToken;
             }
@@ -261,18 +354,23 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     protected function addAuthCookie(ResponseInterface $response, array $authToken,
         ServerRequestInterface $request):ResponseInterface
     {
+        // computing expiration time
         $expireAt = new \DateTime('now');
         $expireAt->add($this->authExpire);
-        $authToken["expireAt"] = $expireAt->format(\DateTime::W3C);
 
+        // adding headers
+        $authToken['_expireAt'] = $expireAt->format(\DateTime::W3C);
+        $authToken['_appVersion'] = $this->getAppVersion();
+
+        // building the cookie
         return SetCookie::thatExpires(
             $this->getAuthCookieName(),
             $this->encodeJwt($authToken),
             $expireAt,
-            $this->getCookiePath(),
-            $this->getCookieDomain($request),
-            $this->getCookieSecure($request),
-            $this->getCookieHttpOnly()
+            $this->getAuthCookiePath() ?? '',
+            $this->getAuthCookieDomain() ?? '',
+            $this->getAuthCookieSecure(),
+            $this->getAuthCookieHttpOnly()
         )->addToResponse($response);
     }
 
@@ -286,10 +384,10 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     {
         return SetCookie::thatDeletesCookie(
             $this->getAuthCookieName(),
-            $this->getCookiePath(),
-            $this->getCookieDomain($request),
-            $this->getCookieSecure($request),
-            $this->getCookieHttpOnly()
+            $this->getAuthCookiePath() ?? '',
+            $this->getAuthCookieDomain() ?? '',
+            $this->getAuthCookieSecure(),
+            $this->getAuthCookieHttpOnly()
         )->addToResponse($response);
     }
 
@@ -324,7 +422,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @license https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-40
+     * @see https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-40
      * @param string $jwtAlgo
      */
     public function setJwtAlgo(string $jwtAlgo):void
@@ -333,61 +431,83 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param ServerRequestInterface $request
-     * @return string
+     * @return string|null
      */
-    public function getCookieDomain(ServerRequestInterface $request):string
+    public function getAuthCookieDomain():?string
     {
-        return $this->cookieDomain ?? $request->getUri()->getHost();
+        return $this->authCookieDomain;
     }
 
     /**
      * @param string $cookieDomain
      */
-    public function setCookieDomain(string $cookieDomain):void
+    public function setAuthCookieDomain(string $authCookieDomain):void
     {
-        $this->cookieDomain = $cookieDomain;
+        $this->authCookieDomain = $authCookieDomain;
     }
 
     /**
-     * @return string
+     * @return string|null
      */
-    public function getCookiePath():string
+    public function getAuthCookiePath():string
     {
-        return $this->cookiePath ?? '';
+        return $this->authCookiePath;
     }
 
     /**
      * @return bool
      */
-    public function getCookieHttpOnly():bool
+    public function getAuthCookieHttpOnly():bool
     {
-        return $this->cookieHttpOnly ?? true;
+        return $this->authCookieHttpOnly;
     }
 
     /**
      * @param bool $cookieHttpOnly
      */
-    public function setCookieHttpOnly(bool $cookieHttpOnly):void
+    public function setAuthCookieHttpOnly(bool $authCookieHttpOnly):void
     {
-        $this->cookieHttpOnly = $cookieHttpOnly;
+        $this->authCookieHttpOnly = $authCookieHttpOnly;
     }
 
     /**
-     * @param ServerRequestInterface $request
      * @return bool
      */
-    public function getCookieSecure(ServerRequestInterface $request):bool
+    public function getAuthCookieSecure():bool
     {
-        return $this->cookieSecure ?? ($request->getUri()->getScheme() == 'https');
+        return $this->authCookieSecure;
     }
 
     /**
      * @param bool $cookieSecure
      */
-    public function setCookieSecure(bool $cookieSecure):void
+    public function setAuthCookieSecure(bool $authCookieSecure):void
     {
-        $this->cookieSecure = $cookieSecure;
+        $this->authCookieSecure = $authCookieSecure;
+    }
+
+    /**
+     * @param string $cookiePath
+     */
+    public function setAuthCookiePath(string $authCookiePath):void
+    {
+        $this->authCookiePath = $authCookiePath;
+    }
+
+    /**
+     * @return string
+     */
+    public function getAuthCookieName():string
+    {
+        return $this->authCookieName;
+    }
+
+    /**
+     * @param string $authCookieName
+     */
+    public function setAuthCookieName(string $authCookieName):void
+    {
+        $this->authCookieName = $authCookieName;
     }
 
     /**
@@ -412,30 +532,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function getJwtKey():string
     {
         return $this->jwtKey;
-    }
-
-    /**
-     * @param string $cookiePath
-     */
-    public function setCookiePath(string $cookiePath):void
-    {
-        $this->cookiePath = $cookiePath;
-    }
-
-    /**
-     * @return string
-     */
-    public function getAuthCookieName():string
-    {
-        return $this->authCookieName;
-    }
-
-    /**
-     * @param string $authCookieName
-     */
-    public function setAuthCookieName(string $authCookieName):void
-    {
-        $this->authCookieName = $authCookieName;
     }
 
     /**
@@ -468,6 +564,22 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function getPublicPaths():array
     {
         return $this->publicPaths;
+    }
+
+    /**
+     * @param string $appVersion
+     */
+    public function setAppVersion(string $appVersion):void
+    {
+        $this->appVersion = $appVersion;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getAppVersion():?string
+    {
+        return $this->appVersion;
     }
 
     /**
