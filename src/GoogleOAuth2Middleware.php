@@ -21,6 +21,7 @@
 //
 declare(strict_types=1);
 namespace CodeInc\GoogleOAuth2Middleware;
+use CodeInc\GoogleOAuth2Middleware\PublicRequestValidators\PublicRequestValidator;
 use CodeInc\GoogleOAuth2Middleware\Responses\LogoutResponseInterface;
 use CodeInc\GoogleOAuth2Middleware\UserValidators\UserValidatorInterface;
 use CodeInc\Psr7Responses\RedirectResponse;
@@ -52,14 +53,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     const DEFAULT_AUTH_EXPIRE = '30 minutes';
     const DEFAULT_JWT_ALGO = 'HS256'; // see https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-40
     const DEFAULT_REQUEST_ATTR_NAME = 'auth';
-
-    /**
-     * Publis URLs path
-     *
-     * @see GoogleOAuth2Middleware::addPublicPath()
-     * @var array
-     */
-    private $publicPaths = [];
 
     /**
      * Name of the auth cookie
@@ -190,6 +183,15 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private $userValidators = [];
 
     /**
+     * Public PSR-7 requests validators.
+     *
+     * @var PublicRequestValidator[]
+     * @see GoogleOAuth2Middleware::addPublicRequestVaidator()
+     * @see GoogleOAuth2Middleware::getPublicRequestValidators()
+     */
+    private $publicRequestValidators = [];
+
+    /**
      * GoogleOAuth2Middleware constructor.
      *
      * @param \Google_Client $googleClient
@@ -197,7 +199,8 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * @param string $oauthRedirectUri
      * @param \DateInterval|null $authExpire
      */
-    public function __construct(\Google_Client $googleClient, string $jwtKey, string $oauthRedirectUri, ?\DateInterval $authExpire = null)
+    public function __construct(\Google_Client $googleClient, string $jwtKey, string $oauthRedirectUri,
+        ?\DateInterval $authExpire = null)
     {
         $this->googleClient = $googleClient;
         $this->googleClient->setRedirectUri($oauthRedirectUri);
@@ -498,14 +501,8 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     protected function isRequestPublic(ServerRequestInterface $request):bool
     {
-        $publicPaths = $this->getPublicPaths();
-        $requestPath = $request->getUri()->getPath();
-
-        if (in_array($requestPath, $publicPaths)) {
-            return true;
-        }
-        foreach ($publicPaths as $publicPath) {
-            if (fnmatch($publicPath, $requestPath)) {
+        foreach ($this->publicRequestValidators as $publicRequestValidator) {
+            if ($publicRequestValidator->isRequestPublic($request)) {
                 return true;
             }
         }
@@ -650,22 +647,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param string $path
-     */
-    public function addPublicPath(string $path):void
-    {
-        $this->publicPaths[] = $path;
-    }
-
-    /**
-     * @return array
-     */
-    public function getPublicPaths():array
-    {
-        return $this->publicPaths;
-    }
-
-    /**
      * @param string $appVersion
      */
     public function setAppVersion(string $appVersion):void
@@ -711,6 +692,22 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function getUserValidators():array
     {
         return $this->userValidators;
+    }
+
+    /**
+     * @param PublicRequestValidator $publicRequestValidator
+     */
+    public function addPublicRequestVaidator(PublicRequestValidator $publicRequestValidator):void
+    {
+        $this->publicRequestValidators[] = $publicRequestValidator;
+    }
+
+    /**
+     * @return PublicRequestValidator[]
+     */
+    public function getPublicRequestValidators():array
+    {
+        return $this->publicRequestValidators;
     }
 
     /**
