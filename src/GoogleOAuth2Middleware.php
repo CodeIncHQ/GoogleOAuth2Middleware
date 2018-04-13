@@ -440,11 +440,9 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * @param ResponseInterface $response
      * @param array $authToken
-     * @param ServerRequestInterface $request
      * @return ResponseInterface
      */
-    protected function addAuthCookie(ResponseInterface $response, array $authToken,
-        ServerRequestInterface $request):ResponseInterface
+    protected function addAuthCookie(ResponseInterface $response, array $authToken):ResponseInterface
     {
         // computing expiration time
         $expireAt = new \DateTime('now');
@@ -468,11 +466,9 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
 
     /**
      * @param ResponseInterface $response
-     * @param ServerRequestInterface $request
      * @return ResponseInterface
      */
-    protected function deleteAuthCookie(ResponseInterface $response,
-        ServerRequestInterface $request):ResponseInterface
+    protected function deleteAuthCookie(ResponseInterface $response):ResponseInterface
     {
         return SetCookie::thatDeletesCookie(
             $this->getAuthCookieName(),
@@ -531,7 +527,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param string $cookieDomain
+     * @param string $authCookieDomain
      */
     public function setAuthCookieDomain(string $authCookieDomain):void
     {
@@ -555,7 +551,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param bool $cookieHttpOnly
+     * @param bool $authCookieHttpOnly
      */
     public function setAuthCookieHttpOnly(bool $authCookieHttpOnly):void
     {
@@ -571,7 +567,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param bool $cookieSecure
+     * @param bool $authCookieSecure
      */
     public function setAuthCookieSecure(bool $authCookieSecure):void
     {
@@ -579,7 +575,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param string $cookiePath
+     * @param string $authCookiePath
      */
     public function setAuthCookiePath(string $authCookiePath):void
     {
