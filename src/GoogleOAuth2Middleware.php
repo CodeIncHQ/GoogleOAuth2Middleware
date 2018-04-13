@@ -57,8 +57,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Name of the auth cookie
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieName()
-     * @see GoogleOAuth2Middleware::getAuthCookieName()
      * @var string
      */
     private $authCookieName = self::DEFAULT_AUTH_COOKIE_NAME;
@@ -66,8 +64,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies domain
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieDomain()
-     * @see GoogleOAuth2Middleware::getAuthCookieDomain()
      * @var string|null
      */
     private $authCookieDomain;
@@ -75,8 +71,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies path.
      *
-     * @see GoogleOAuth2Middleware::setAuthCookiePath()
-     * @see GoogleOAuth2Middleware::getAuthCookiePath()
      * @var string|null
      */
     private $authCookiePath;
@@ -84,9 +78,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies secure.
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieSecure()
-     * @see GoogleOAuth2Middleware::getAuthCookieSecure()
-     * @see GoogleOAuth2Middleware::DEFAULT_AUTH_COOKIE_SECURE
      * @var bool
      */
     private $authCookieSecure = self::DEFAULT_AUTH_COOKIE_SECURE;
@@ -94,9 +85,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Cookies HTTP only.
      *
-     * @see GoogleOAuth2Middleware::setAuthCookieHttpOnly()
-     * @see GoogleOAuth2Middleware::getAuthCookieHttpOnly()
-     * @see GoogleOAuth2Middleware::DEFAULT_AUTH_COOKIE_HTTP_ONLY
      * @var bool
      */
     private $authCookieHttpOnly = self::DEFAULT_AUTH_COOKIE_HTTP_ONLY;
@@ -104,8 +92,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Auth expire.
      *
-     * @see GoogleOAuth2Middleware::setAuthExpire()
-     * @see GoogleOAuth2Middleware::getAuthExpire()
      * @var \DateInterval
      */
     private $authExpire;
@@ -113,8 +99,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      *JSON web token encryption key.
      *
-     * @see GoogleOAuth2Middleware::__construct()
-     * @see GoogleOAuth2Middleware::getJwtKey()
      * @var string
      */
     private $jwtKey;
@@ -122,9 +106,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * JSON web token encryption algorithme.
      *
-     * @see GoogleOAuth2Middleware::setJwtAlgo()
-     * @see GoogleOAuth2Middleware::getJwtAlgo()
-     * @see GoogleOAuth2Middleware::DEFAULT_JWT_ALGO
      * @var string
      */
     private $jwtAlgo = self::DEFAULT_JWT_ALGO;
@@ -132,18 +113,13 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Attribute name added to the PSR-7 request object for the authentication infos.
      *
-     * @see GoogleOAuth2Middleware::setRequestAttrName()
-     * @see GoogleOAuth2Middleware::getRequestAttrName()
-     * @see GoogleOAuth2Middleware::DEFAULT_REQUEST_ATTR_NAME
      * @var string
      */
     private $requestAttrName = self::DEFAULT_REQUEST_ATTR_NAME;
 
     /**
-     * PSR-7 RequestHandler for unauthenticated requests.
+     * PSR-15 RequestHandler for unauthenticated requests.
      *
-     * @see GoogleOAuth2Middleware::setUnauthenticatedRequestHandler()
-     * @see GoogleOAuth2Middleware::getUnauthenticatedRequestHandler()
      * @var RequestHandlerInterface|null
      */
     private $unauthenticatedRequestHandler;
@@ -159,7 +135,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * OAuth2 redirect URI (the one receiving the "code" parameter)
      *
-     * @see GoogleOAuth2Middleware::getOauthRedirectUri()
      * @var string
      */
     private $oauthRedirectUri;
@@ -167,8 +142,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * App version added to the JSON web token to limit the session to the current version of the app.
      *
-     * @see GoogleOAuth2Middleware::setAppVersion()
-     * @see GoogleOAuth2Middleware::getAppVersion()
      * @var string
      */
     private $appVersion;
@@ -177,8 +150,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * User validators.
      *
      * @var UserValidatorInterface[]
-     * @see GoogleOAuth2Middleware::addUserValidator()
-     * @see GoogleOAuth2Middleware::getUserValidators()
      */
     private $userValidators = [];
 
@@ -186,8 +157,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * Public PSR-7 requests validators.
      *
      * @var PublicRequestValidator[]
-     * @see GoogleOAuth2Middleware::addPublicRequestVaidator()
-     * @see GoogleOAuth2Middleware::getPublicRequestValidators()
      */
     private $publicRequestValidators = [];
 
