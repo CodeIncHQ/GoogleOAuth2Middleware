@@ -250,7 +250,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
             $googleUserInfos = $this->getGoogleUserInfos($request);
 
             // validating the user
-            if ($this->validateUser($googleUserInfos)) {
+            if (!$this->validateUser($googleUserInfos)) {
                 return new UnauthorizedResponse();
             }
 
