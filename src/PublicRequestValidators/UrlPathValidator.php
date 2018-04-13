@@ -30,7 +30,7 @@ use Psr\Http\Message\ServerRequestInterface;
  * @package CodeInc\GoogleOAuth2Middleware\PublicRequestValidators
  * @author Joan Fabrégat <joan@codeinc.fr>
  */
-class UrlPathValidator implements PublicRequestValidator
+class UrlPathValidator implements PublicRequestValidatorInterface
 {
     /**
      * @var string[]

@@ -25,12 +25,12 @@ use Psr\Http\Message\ServerRequestInterface;
 
 
 /**
- * Interface PublicRequestValidator
+ * Interface PublicRequestValidatorInterface
  *
  * @package CodeInc\GoogleOAuth2Middleware\PublicRequestValidators
  * @author Joan Fabrégat <joan@codeinc.fr>
  */
-interface PublicRequestValidator
+interface PublicRequestValidatorInterface
 {
     /**
      * Validates if a request is public.

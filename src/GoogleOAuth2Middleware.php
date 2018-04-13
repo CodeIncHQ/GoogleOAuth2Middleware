@@ -21,7 +21,7 @@
 //
 declare(strict_types=1);
 namespace CodeInc\GoogleOAuth2Middleware;
-use CodeInc\GoogleOAuth2Middleware\PublicRequestValidators\PublicRequestValidator;
+use CodeInc\GoogleOAuth2Middleware\PublicRequestValidators\PublicRequestValidatorInterface;
 use CodeInc\GoogleOAuth2Middleware\Responses\LogoutResponseInterface;
 use CodeInc\GoogleOAuth2Middleware\UserValidators\UserValidatorInterface;
 use CodeInc\Psr7Responses\RedirectResponse;
@@ -164,7 +164,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * Public PSR-7 requests validators.
      *
-     * @var PublicRequestValidator[]
+     * @var PublicRequestValidatorInterface[]
      */
     private $publicRequestValidators = [];
 
@@ -692,15 +692,15 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param PublicRequestValidator $publicRequestValidator
+     * @param PublicRequestValidatorInterface $publicRequestValidator
      */
-    public function addPublicRequestVaidator(PublicRequestValidator $publicRequestValidator):void
+    public function addPublicRequestVaidator(PublicRequestValidatorInterface $publicRequestValidator):void
     {
         $this->publicRequestValidators[] = $publicRequestValidator;
     }
 
     /**
-     * @return PublicRequestValidator[]
+     * @return PublicRequestValidatorInterface[]
      */
     public function getPublicRequestValidators():array
     {
