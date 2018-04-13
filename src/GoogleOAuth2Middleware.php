@@ -25,6 +25,7 @@ use CodeInc\GoogleOAuth2Middleware\PublicRequestValidators\PublicRequestValidato
 use CodeInc\GoogleOAuth2Middleware\Responses\LogoutResponseInterface;
 use CodeInc\GoogleOAuth2Middleware\UserValidators\UserValidatorInterface;
 use CodeInc\Psr7Responses\RedirectResponse;
+use CodeInc\Psr7Responses\UnauthorizedResponse;
 use CodeInc\Url\Url;
 use Firebase\JWT\JWT;
 use HansOtt\PSR7Cookies\SetCookie;
@@ -250,9 +251,11 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
 
             // validating the user
             if ($this->validateUser($googleUserInfos)) {
+                return new UnauthorizedResponse();
+            }
 
-                // building the auth token
-                $authToken = $this->buildAuthToken($googleUserInfos);
+            // building the auth token
+            $authToken = $this->buildAuthToken($googleUserInfos);
 
             // if a specific handler is given for the OAuth callback requests
             if ($this->oauthCallbackRequestHandler) {
@@ -264,8 +267,12 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
                 $request->withAttribute($this->requestAttrName, $authToken)
             );
 
-                return $response;
+            // adding the auth cookie to the PSR-7 response
+            if (!$response instanceof LogoutResponseInterface) {
+                $response = $this->getAuthCookie($authToken)->addToResponse($response);
             }
+
+            return $response;
         }
         return null;
     }
