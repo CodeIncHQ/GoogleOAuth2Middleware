@@ -22,6 +22,7 @@
 declare(strict_types=1);
 namespace CodeInc\GoogleOAuth2Middleware;
 use CodeInc\GoogleOAuth2Middleware\Responses\LogoutResponseInterface;
+use CodeInc\GoogleOAuth2Middleware\UserValidators\UserValidatorInterface;
 use CodeInc\Psr7Responses\RedirectResponse;
 use CodeInc\Url\Url;
 use Firebase\JWT\JWT;
@@ -172,6 +173,15 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private $appVersion;
 
     /**
+     * User validators.
+     *
+     * @var UserValidatorInterface[]
+     * @see GoogleOAuth2Middleware::addUserValidator()
+     * @see GoogleOAuth2Middleware::getUserValidators()
+     */
+    private $userValidators = [];
+
+    /**
      * GoogleOAuth2Middleware constructor.
      *
      * @param \Google_Client $googleClient
@@ -193,65 +203,147 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler):ResponseInterface
     {
-        /*
-         * Public requests
-         */
-        if ($this->isRequestPublic($request)) {
-            return $handler->handle($request);
-        }
-
-        /*
-         * Google auth requests
-         */
-        $googleRedirectUri = new Url($this->googleClient->getRedirectUri());
-        if ($request->getUri()->getPath() == $googleRedirectUri->getPath()
-            && isset($request->getQueryParams()["code"])) {
-
-            $authToken = $this->processGoogleAccessCode($request);
-
-            $response = $handler->handle(
-                $request->withAttribute($this->getRequestAttrName(), $authToken)
-            );
-            if (!$response instanceof LogoutResponseInterface) {
-                $response = $this->addAuthCookie($response, $authToken, $request);
-            }
-
+        // Public requests
+        if ($response = $this->processPublicRequests($request, $handler)) {
             return $response;
         }
 
-        /*
-         * Authenticated requests
-         */
+        // Google oauth requests
+        if ($response = $this->processGoogleOauthRequests($request, $handler)) {
+            return $response;
+        }
+
+        // Authenticated requests
+        if ($response = $this->processAuthenticatedRequests($request, $handler)) {
+            return $response;
+        }
+
+        // Unauthenticated requests
+        return $this->processUnauthenticatedRequests($request);
+    }
+
+    /**
+     * Processes the public requests. Returns the respnse or null if the request is not public.
+     *
+     * @param ServerRequestInterface $request
+     * @param RequestHandlerInterface $handler
+     * @return null|ResponseInterface
+     */
+    private function processPublicRequests(ServerRequestInterface $request,
+        RequestHandlerInterface $handler):?ResponseInterface
+    {
+        if ($this->isRequestPublic($request)) {
+            return $handler->handle($request);
+        }
+        return null;
+    }
+
+    /**
+     * Processes the Google OAuth requests. Returns the response if the request is a Google OAuth request including an
+     * authentication code or null of other requests.
+     *
+     * @param ServerRequestInterface $request
+     * @param RequestHandlerInterface $handler
+     * @return null|ResponseInterface
+     * @throws GoogleOAuth2MiddlewareException
+     */
+    private function processGoogleOauthRequests(ServerRequestInterface $request,
+        RequestHandlerInterface $handler):?ResponseInterface
+    {
+        // checking the request
+        $oauthRedirectUri = new Url($this->oauthRedirectUri);
+        if ($request->getUri()->getPath() == $oauthRedirectUri->getPath()
+            && isset($request->getQueryParams()["code"])) {
+
+            // loading the Google user infos
+            $googleUserInfos = $this->getGoogleUserInfos($request);
+
+            // validating the user
+            if ($this->validateUser($googleUserInfos)) {
+
+                // building the auth token
+                $authToken = $this->buildAuthToken($googleUserInfos);
+
+                // processing the PSR-7 request with the auth token
+                $response = $handler->handle(
+                    $request->withAttribute($this->getRequestAttrName(), $authToken)
+                );
+
+                // adding the auth cookie to the PSR-7 response
+                if (!$response instanceof LogoutResponseInterface) {
+                    $response = $this->addAuthCookie($response, $authToken);
+                }
+
+                return $response;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Proesses the authenticated requrests. Returns null if the request does not include the authentication cookie.
+     *
+     * @param ServerRequestInterface $request
+     * @param RequestHandlerInterface $handler
+     * @return null|ResponseInterface
+     */
+    private function processAuthenticatedRequests(ServerRequestInterface $request,
+        RequestHandlerInterface $handler):?ResponseInterface
+    {
         if (($authToken = $this->readAuthCookie($request)) !== null) {
             $response = $handler->handle(
                 $request->withAttribute($this->getRequestAttrName(), $authToken)
             );
             if ($response instanceof LogoutResponseInterface) {
-                $response = $this->deleteAuthCookie($response, $request);
+                $response = $this->deleteAuthCookie($response);
             }
             return $response;
         }
+        return null;
+    }
 
-        /*
-         * Unauthenticated requests
-         */
+    /**
+     * Processes the unauthenticated requests.
+     *
+     * @param ServerRequestInterface $request
+     * @return ResponseInterface
+     */
+    private function processUnauthenticatedRequests(ServerRequestInterface $request):ResponseInterface
+    {
         return $this->unauthenticatedRequestHandler
             ? $this->unauthenticatedRequestHandler->handle($request)
             : new RedirectResponse($this->googleClient->createAuthUrl());
     }
 
     /**
-     * Processes a Google authentication code.
+     * Validates a user using the supplied validators.
      *
-     * @param ServerRequestInterface $request
-     * @return array
-     * @throws GoogleOAuth2MiddlewareException
+     * @param \Google_Service_Oauth2_Userinfoplus $googleUserInfos
+     * @return bool
      */
-    private function processGoogleAccessCode(ServerRequestInterface $request):array
+    private function validateUser(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):bool
     {
-        // loading the Google user infos
-        $googleUserInfos = $this->getGoogleUserInfos($request);
+        if (!empty($this->userValidators)) {
+            foreach ($this->userValidators as $validator) {
+                if ($validator->validateUser($googleUserInfos)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
 
+    /**
+     * Builds the auth token using the user infos fetched via the Google API.
+     *
+     * @param \Google_Service_Oauth2_Userinfoplus $googleUserInfos
+     * @return array
+     */
+    private function buildAuthToken(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):array
+    {
         // building the auth token using Google user infos
         return [
             "googleId" => $googleUserInfos->getId(),
@@ -596,5 +688,21 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function setUnauthenticatedRequestHandler(RequestHandlerInterface $unauthenticatedRequestHandler):void
     {
         $this->unauthenticatedRequestHandler = $unauthenticatedRequestHandler;
+    }
+
+    /**
+     * @param UserValidatorInterface $userValidator
+     */
+    public function addUserValidator(UserValidatorInterface $userValidator):void
+    {
+        $this->userValidators[] = $userValidator;
+    }
+
+    /**
+     * @return UserValidatorInterface[]
+     */
+    public function getUserValidators():array
+    {
+        return $this->userValidators;
     }
 }
