@@ -164,6 +164,14 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private $googleClient;
 
     /**
+     * OAuth2 redirect URI (the one receiving the "code" parameter)
+     *
+     * @see GoogleOAuth2Middleware::getOauthRedirectUri()
+     * @var string
+     */
+    private $oauthRedirectUri;
+
+    /**
      * App version added to the JSON web token to limit the session to the current version of the app.
      *
      * @see GoogleOAuth2Middleware::setAppVersion()
@@ -186,12 +194,15 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      *
      * @param \Google_Client $googleClient
      * @param string $jwtKey
+     * @param string $oauthRedirectUri
      * @param \DateInterval|null $authExpire
      */
-    public function __construct(\Google_Client $googleClient, string $jwtKey, ?\DateInterval $authExpire = null)
+    public function __construct(\Google_Client $googleClient, string $jwtKey, string $oauthRedirectUri, ?\DateInterval $authExpire = null)
     {
         $this->googleClient = $googleClient;
+        $this->googleClient->setRedirectUri($oauthRedirectUri);
         $this->jwtKey = $jwtKey;
+        $this->oauthRedirectUri = $oauthRedirectUri;
         $this->authExpire = $authExpire ?? \DateInterval::createFromDateString(self::DEFAULT_AUTH_EXPIRE);
     }
 
@@ -700,5 +711,13 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function getUserValidators():array
     {
         return $this->userValidators;
+    }
+
+    /**
+     * @return string
+     */
+    public function getOauthRedirectUri():string
+    {
+        return $this->oauthRedirectUri;
     }
 }
