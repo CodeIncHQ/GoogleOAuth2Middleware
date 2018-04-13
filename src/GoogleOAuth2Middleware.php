@@ -125,6 +125,13 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private $unauthenticatedRequestHandler;
 
     /**
+     * PSR-15 RequestHandler for oauth callback requests.
+     *
+     * @var RequestHandlerInterface|null
+     */
+    private $oauthCallbackRequestHandler;
+
+    /**
      * Google API client.
      *
      * @link https://github.com/google/google-api-php-client
@@ -247,15 +254,15 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
                 // building the auth token
                 $authToken = $this->buildAuthToken($googleUserInfos);
 
-                // processing the PSR-7 request with the auth token
-                $response = $handler->handle(
-                    $request->withAttribute($this->getRequestAttrName(), $authToken)
-                );
+            // if a specific handler is given for the OAuth callback requests
+            if ($this->oauthCallbackRequestHandler) {
+                $handler = $this->oauthCallbackRequestHandler;
+            }
 
-                // adding the auth cookie to the PSR-7 response
-                if (!$response instanceof LogoutResponseInterface) {
-                    $response = $this->addAuthCookie($response, $authToken);
-                }
+            // processing the PSR-7 request with the auth token
+            $response = $handler->handle(
+                $request->withAttribute($this->requestAttrName, $authToken)
+            );
 
                 return $response;
             }
@@ -645,6 +652,22 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function setUnauthenticatedRequestHandler(RequestHandlerInterface $unauthenticatedRequestHandler):void
     {
         $this->unauthenticatedRequestHandler = $unauthenticatedRequestHandler;
+    }
+
+    /**
+     * @return null|RequestHandlerInterface
+     */
+    public function getOauthCallbackRequestHandler():?RequestHandlerInterface
+    {
+        return $this->oauthCallbackRequestHandler;
+    }
+
+    /**
+     * @param RequestHandlerInterface $oauthCallbackRequestHandler
+     */
+    public function setOauthCallbackRequestHandler(RequestHandlerInterface $oauthCallbackRequestHandler):void
+    {
+        $this->oauthCallbackRequestHandler = $oauthCallbackRequestHandler;
     }
 
     /**
