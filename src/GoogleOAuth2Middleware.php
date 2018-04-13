@@ -285,7 +285,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
                 $request->withAttribute($this->getRequestAttrName(), $authToken)
             );
             if ($response instanceof LogoutResponseInterface) {
-                $response = $this->deleteAuthCookie($response);
+                $response = $this->getAuthDeleteCookie()->addToResponse($response);
             }
             return $response;
         }
@@ -385,7 +385,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     public function encodeJwt(array $data):string
     {
-        return JWT::encode($data, $this->getJwtKey(), $this->getJwtAlgo());
+        return JWT::encode($data, $this->jwtKey, $this->jwtAlgo);
     }
 
     /**
@@ -414,10 +414,10 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     protected function readAuthCookie(ServerRequestInterface $request):?array
     {
-        if (isset($request->getCookieParams()[$this->getAuthCookieName()])
-            && ($authToken = $this->decodeJwt($request->getCookieParams()[$this->getAuthCookieName()])) !== null
+        if (isset($request->getCookieParams()[$this->authCookieName])
+            && ($authToken = $this->decodeJwt($request->getCookieParams()[$this->authCookieName])) !== null
             && isset($authToken['_expireAt'], $authToken['_appVersion'])
-            && ($this->getAppVersion() === null || $authToken['_appVersion'] == $this->getAppVersion())) {
+            && ($this->appVersion === null || $authToken['_appVersion'] == $this->appVersion)) {
 
             $expireAt = new \DateTime($authToken['_expireAt']);
             if ($expireAt > (new \DateTime('now'))) {
@@ -428,11 +428,10 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param ResponseInterface $response
      * @param array $authToken
-     * @return ResponseInterface
+     * @return SetCookie
      */
-    protected function addAuthCookie(ResponseInterface $response, array $authToken):ResponseInterface
+    protected function getAuthCookie(array $authToken):SetCookie
     {
         // computing expiration time
         $expireAt = new \DateTime('now');
@@ -444,29 +443,28 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
 
         // building the cookie
         return SetCookie::thatExpires(
-            $this->getAuthCookieName(),
+            $this->authCookieName,
             $this->encodeJwt($authToken),
             $expireAt,
-            $this->getAuthCookiePath() ?? '',
-            $this->getAuthCookieDomain() ?? '',
-            $this->getAuthCookieSecure(),
-            $this->getAuthCookieHttpOnly()
-        )->addToResponse($response);
+            $this->authCookiePath ?? '',
+            $this->authCookieDomain ?? '',
+            $this->authCookieSecure,
+            $this->authCookieHttpOnly
+        );
     }
 
     /**
-     * @param ResponseInterface $response
-     * @return ResponseInterface
+     * @return SetCookie
      */
-    protected function deleteAuthCookie(ResponseInterface $response):ResponseInterface
+    protected function getAuthDeleteCookie():SetCookie
     {
         return SetCookie::thatDeletesCookie(
-            $this->getAuthCookieName(),
-            $this->getAuthCookiePath() ?? '',
-            $this->getAuthCookieDomain() ?? '',
-            $this->getAuthCookieSecure(),
-            $this->getAuthCookieHttpOnly()
-        )->addToResponse($response);
+            $this->authCookieName,
+            $this->authCookiePath ?? '',
+            $this->authCookieDomain ?? '',
+            $this->authCookieSecure,
+            $this->authCookieHttpOnly
+        );
     }
 
     /**
