@@ -694,7 +694,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     /**
      * @param PublicRequestValidatorInterface $publicRequestValidator
      */
-    public function addPublicRequestVaidator(PublicRequestValidatorInterface $publicRequestValidator):void
+    public function addPublicRequestValidator(PublicRequestValidatorInterface $publicRequestValidator):void
     {
         $this->publicRequestValidators[] = $publicRequestValidator;
     }
