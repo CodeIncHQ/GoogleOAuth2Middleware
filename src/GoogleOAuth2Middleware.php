@@ -169,6 +169,41 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private $publicRequestValidators = [];
 
     /**
+     * Includes the picture in the auth token.
+     *
+     * @var bool
+     */
+    public $authTokenIncludePicture = true;
+
+    /**
+     * Includes the locale in the auth token.
+     *
+     * @var bool
+     */
+    public $authTokenIncludeLocale = true;
+
+    /**
+     * Includes the gender in the auth token.
+     *
+     * @var bool
+     */
+    public $authTokenIncludeGender = true;
+
+    /**
+     * Includes the user name, given name and family name in the auth token.
+     *
+     * @var bool
+     */
+    public $authTokenIncludeName = true;
+
+    /**
+     * Includes the user email in the auth token.
+     *
+     * @var bool
+     */
+    public $authTokenIncludeEmail = true;
+
+    /**
      * GoogleOAuth2Middleware constructor.
      *
      * @param \Google_Client $googleClient
@@ -287,9 +322,9 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private function processAuthenticatedRequests(ServerRequestInterface $request,
         RequestHandlerInterface $handler):?ResponseInterface
     {
-        if (($authToken = $this->readAuthCookie($request)) !== null) {
+        if (($authTokenData = $this->readAuthCookie($request)) !== null) {
             $response = $handler->handle(
-                $request->withAttribute($this->getRequestAttrName(), $authToken)
+                $request->withAttribute($this->getRequestAttrName(), new AuthToken($authTokenData))
             );
             if ($response instanceof LogoutResponseInterface) {
                 $response = $this->getAuthDeleteCookie()->addToResponse($response);
@@ -337,22 +372,32 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * Builds the auth token using the user infos fetched via the Google API.
      *
      * @param \Google_Service_Oauth2_Userinfoplus $googleUserInfos
-     * @return array
+     * @return AuthToken
      */
-    private function buildAuthToken(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):array
+    private function buildAuthToken(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):AuthToken
     {
-        // building the auth token using Google user infos
-        return [
-            "googleId" => $googleUserInfos->getId(),
-            "email" => $googleUserInfos->getEmail(),
-            "verifiedEmail" => $googleUserInfos->getVerifiedEmail(),
-            "gender" => $googleUserInfos->getGender(),
-            "familyName" => $googleUserInfos->getFamilyName(),
-            "givenName" => $googleUserInfos->getGivenName(),
-            "locale" => $googleUserInfos->getLocale(),
-            "picture" => $googleUserInfos->getPicture(),
-            "name" => $googleUserInfos->getName(),
-        ];
+        $authTokenData = ['googleId' => $googleUserInfos->getId()];
+
+        if ($this->authTokenIncludeEmail) {
+            $authTokenData['email'] = $googleUserInfos->getEmail();
+            $authTokenData['verifiedEmail'] = $googleUserInfos->getVerifiedEmail();
+        }
+        if ($this->authTokenIncludeGender) {
+            $authTokenData['gender'] = $googleUserInfos->getGender();
+        }
+        if ($this->authTokenIncludeName) {
+            $authTokenData['familyName'] = $googleUserInfos->getFamilyName();
+            $authTokenData['givenName'] = $googleUserInfos->getGivenName();
+            $authTokenData['name'] = $googleUserInfos->getName();
+        }
+        if ($this->authTokenIncludeLocale) {
+            $authTokenData['locale'] = $googleUserInfos->getLocale();
+        }
+        if ($this->authTokenIncludePicture) {
+            $authTokenData['picture'] = $googleUserInfos->getPicture();
+        }
+
+        return new AuthToken($authTokenData);
     }
 
     /**
@@ -365,11 +410,11 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private function getGoogleUserInfos(ServerRequestInterface $request):\Google_Service_Oauth2_Userinfoplus
     {
         try {
-            $accessToken = $this->googleClient->fetchAccessTokenWithAuthCode($request->getQueryParams()["code"]);
-            if (isset($accessToken["error"])) {
+            $accessToken = $this->googleClient->fetchAccessTokenWithAuthCode($request->getQueryParams()['code']);
+            if (isset($accessToken['error'])) {
                 throw new GoogleOAuth2MiddlewareException(
-                    sprintf("Google access token error (%s): %s",
-                        $accessToken["error"], $accessToken["error_description"]),
+                    sprintf('Google access token error (%s): %s',
+                        $accessToken['error'], $accessToken['error_description']),
                     $this
                 );
             }
@@ -378,7 +423,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
         }
         catch (\Throwable $exception) {
             throw new GoogleOAuth2MiddlewareException(
-                "Error while loading Google user infos",
+                'Error while loading Google user infos',
                 $this, 0, $exception
             );
         }
@@ -435,10 +480,10 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param array $authToken
+     * @param AuthToken $authToken
      * @return SetCookie
      */
-    protected function getAuthCookie(array $authToken):SetCookie
+    protected function getAuthCookie(AuthToken $authToken):SetCookie
     {
         // computing expiration time
         $expireAt = new \DateTime('now');
@@ -451,7 +496,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
         // building the cookie
         return SetCookie::thatExpires(
             $this->authCookieName,
-            $this->encodeJwt($authToken),
+            $this->encodeJwt($authToken->toArray()),
             $expireAt,
             $this->authCookiePath ?? '',
             $this->authCookieDomain ?? '',
@@ -713,5 +758,34 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function getOauthCallbackUri():string
     {
         return $this->oauthCallbackUri;
+    }
+
+    /**
+     * Includes all the data in the auth token :
+     * - email
+     * - gender
+     * - locale
+     * - given name, family name and name
+     * - picture
+     */
+    public function setAuthTokenIncludeAll():void
+    {
+        $this->authTokenIncludeEmail = true;
+        $this->authTokenIncludeGender = true;
+        $this->authTokenIncludeLocale = true;
+        $this->authTokenIncludeName = true;
+        $this->authTokenIncludePicture = true;
+    }
+
+    /**
+     * Includes non data in the auth token.
+     */
+    public function setAuthTokenIncludeNone():void
+    {
+        $this->authTokenIncludeEmail = false;
+        $this->authTokenIncludeGender = false;
+        $this->authTokenIncludeLocale = false;
+        $this->authTokenIncludeName = false;
+        $this->authTokenIncludePicture = false;
     }
 }
