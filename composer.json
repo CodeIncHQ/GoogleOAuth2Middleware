@@ -1,6 +1,6 @@
 {
   "name": "codeinc/google-oauth2-middleware",
-  "version": "1.2.2-beta.1",
+  "version": "1.2.2-beta.2",
   "description": "A PSR-15 middleware managing Google OAuth2 authentication using JSON web tokens",
   "homepage": "https://github.com/CodeIncHQ/GoogleOAuth2Middleware",
   "type": "library",
