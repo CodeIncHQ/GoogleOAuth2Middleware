@@ -324,6 +324,9 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private function attachAuthTokenToResponse(ResponseInterface $response, AuthToken $authToken):ResponseInterface
     {
         if (!$response instanceof LogoutResponseInterface) {
+            $authToken = clone $authToken;
+            $authToken->updateExpiresAt($this->authExpire);
+
             return SetCookie::thatExpires(
                 $this->authCookieName,
                 JWT::encode($authToken->toArray(), $this->jwtKey, $this->jwtAlgo),
@@ -431,7 +434,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     private function buildAuthToken(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):AuthToken
     {
-        $authToken = new AuthToken((int)$googleUserInfos->getId(), $this->getAppVersion());
+        $authToken = new AuthToken((int)$googleUserInfos->getId(), $this->getAppVersion(), $this->authExpire);
 
         if ($this->authTokenIncludeEmail) {
             $authToken->setEmail($googleUserInfos->getEmail());
@@ -605,13 +608,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
         $this->authExpire = $authExpire;
     }
 
-    /**
-     * @return \DateInterval
-     */
-    public function getAuthExpire():\DateInterval
-    {
-        return $this->authExpire;
-    }
 
     /**
      * @return string

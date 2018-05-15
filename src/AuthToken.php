@@ -30,6 +30,8 @@ namespace CodeInc\GoogleOAuth2Middleware;
  */
 class AuthToken implements \IteratorAggregate
 {
+    public const DEFAULT_LIFESPAN = GoogleOAuth2Middleware::DEFAULT_AUTH_EXPIRE;
+
     /**
      * @var int
      */
@@ -88,15 +90,15 @@ class AuthToken implements \IteratorAggregate
     /**
      * AuthToken constructor.
      *
-     * @param int         $googleId
-     * @param null|string $appVersion
+     * @param int                $googleId
+     * @param null|string        $appVersion
+     * @param \DateInterval|null $lifespan
      */
-    public function __construct(int $googleId, ?string $appVersion = null)
+    public function __construct(int $googleId, ?string $appVersion = null, ?\DateInterval $lifespan = null)
     {
         $this->googleId = $googleId;
-        $this->setExpiresAt((new \DateTime('now'))
-            ->add(\DateInterval::createFromDateString('30 min')));
         $this->appVersion = $appVersion;
+        $this->updateExpiresAt($lifespan ?? \DateInterval::createFromDateString(self::DEFAULT_LIFESPAN));
     }
 
     /**
@@ -289,6 +291,17 @@ class AuthToken implements \IteratorAggregate
     public function setExpiresAt(\DateTime $expiresAt):void
     {
         $this->expiresAt = $expiresAt->format(\DateTime::ATOM);
+    }
+
+    /**
+     * Update the expiration date.
+     *
+     * @param \DateInterval $lifespan
+     */
+    public function updateExpiresAt(\DateInterval $lifespan):void
+    {
+        $this->setExpiresAt((new \DateTime('now'))
+            ->add(\DateInterval::createFromDateString($lifespan)));
     }
 
     /**
