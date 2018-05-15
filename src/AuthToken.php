@@ -300,8 +300,7 @@ class AuthToken implements \IteratorAggregate
      */
     public function updateExpiresAt(\DateInterval $lifespan):void
     {
-        $this->setExpiresAt((new \DateTime('now'))
-            ->add(\DateInterval::createFromDateString($lifespan)));
+        $this->setExpiresAt((new \DateTime('now'))->add($lifespan));
     }
 
     /**
