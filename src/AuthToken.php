@@ -28,7 +28,7 @@ namespace CodeInc\GoogleOAuth2Middleware;
  * @package CodeInc\GoogleOAuth2Middleware
  * @author  Joan Fabrégat <joan@codeinc.fr>
  */
-class AuthToken implements \IteratorAggregate, \ArrayAccess
+class AuthToken implements \IteratorAggregate
 {
     /**
      * @var int
@@ -284,32 +284,29 @@ class AuthToken implements \IteratorAggregate, \ArrayAccess
     }
 
     /**
-     * @inheritdoc
-     * @param string|int $offset
+     * @param \DateTime $expiresAt
      */
-    public function offsetUnset($offset)
+    public function setExpiresAt(\DateTime $expiresAt):void
     {
-        return;
+        $this->expiresAt = $expiresAt->format(\DateTime::ATOM);
     }
 
     /**
-     * @inheritdoc
-     * @param string|int $offset
-     * @param mixed $value
+     * Verifies if the auth token is expired.
+     *
+     * @return bool
      */
-    public function offsetSet($offset, $value)
+    public function isExpired():bool
     {
-        return;
+        return $this->getExpiresAt() <= (new \DateTime('now'));
     }
 
     /**
-     * @inheritdoc
-     * @param string|int $offset
-     * @return mixed|null
+     * @return null|string
      */
-    public function offsetGet($offset)
+    public function getAppVersion():?string
     {
-        return $this->authToken[$offset] ?? null;
+        return $this->appVersion;
     }
 
     /**
@@ -335,9 +332,9 @@ class AuthToken implements \IteratorAggregate, \ArrayAccess
      * @param null|string $appVersion
      * @return bool
      */
-    public function offsetExists($offset):bool
+    public function isValid(?string $appVersion = null):bool
     {
-        return array_key_exists($offset, $this->authToken);
+        return (($appVersion === null || $this->isOfVersion($appVersion)) && !$this->isExpired());
     }
 
     /**
