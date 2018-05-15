@@ -28,187 +28,322 @@ namespace CodeInc\GoogleOAuth2Middleware;
  * @package CodeInc\GoogleOAuth2Middleware
  * @author  Joan Fabrégat <joan@codeinc.fr>
  */
-class AuthToken implements \IteratorAggregate, \ArrayAccess
+class AuthToken implements \IteratorAggregate
 {
     /**
-     * @var array
+     * @var int
      */
-    private $authToken =[];
+    private $googleId;
+
+    /**
+     * @var string|null
+     */
+    private $email;
+
+    /**
+     * @var bool
+     */
+    private $verifiedEmail = false;
+
+    /**
+     * @var string|null
+     */
+    private $gender;
+
+    /**
+     * @var string|null
+     */
+    private $familyName;
+
+    /**
+     * @var string|null
+     */
+    private $givenName;
+
+    /**
+     * @var string|null
+     */
+    private $name;
+
+    /**
+     * @var string|null
+     */
+    private $locale;
+
+    /**
+     * @var string|null
+     */
+    private $picture;
+
+    /**
+     * @var string
+     */
+    private $expiresAt;
+
+    /**
+     * @var string|null
+     */
+    private $appVersion;
 
     /**
      * AuthToken constructor.
      *
-     * @param array $authToken
+     * @param int         $googleId
+     * @param null|string $appVersion
      */
-    public function __construct(array $authToken = [])
+    public function __construct(int $googleId, ?string $appVersion = null)
     {
-        $this->authToken = $authToken;
+        $this->googleId = $googleId;
+        $this->setExpiresAt((new \DateTime('now'))
+            ->add(\DateInterval::createFromDateString('30 min')));
+        $this->appVersion = $appVersion;
     }
 
     /**
-     * @param \Google_Service_Oauth2_Userinfoplus $googleUserInfos
-     * @return AuthToken
-     */
-    public static function fromGoogleUserInfos(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):self
-    {
-        return new self([
-            'email' => $googleUserInfos->getEmail(),
-            'verifiedEmail' => $googleUserInfos->getVerifiedEmail(),
-            'gender' => $googleUserInfos->getGender(),
-            'familyName' => $googleUserInfos->getFamilyName(),
-            'givenName' => $googleUserInfos->getGivenName(),
-            'name' => $googleUserInfos->getName(),
-            'locale' => $googleUserInfos->getLocale(),
-            'picture' => $googleUserInfos->getPicture(),
-        ]);
-    }
-
-    /**
-     * Returns the Google id.
+     * Transforms the auth token into an array.
      *
-     * @return string|null
-     */
-    public function getGoogleId():?string
-    {
-        return $this->authToken['googleId'] ?? null;
-    }
-
-    /**
-     * Returns the email address.
-     *
-     * @return null|string
-     */
-    public function getEmail():?string
-    {
-        return $this->authToken['email'] ?? null;
-    }
-
-    /**
-     * Checks if the email address is verified.
-     *
-     * @return null|bool
-     */
-    public function isEmailVerified():?bool
-    {
-        return isset($this->authToken['verifiedEmail']) ? (bool)$this->authToken['verifiedEmail'] : null;
-    }
-
-    /**
-     * Returns the gender.
-     *
-     * @return null|string
-     */
-    public function getGender():?string
-    {
-        return $this->authToken['gender'] ?? null;
-    }
-
-    /**
-     * Returns the family name.
-     *
-     * @return null|string
-     */
-    public function getFamilyName():?string
-    {
-        return $this->authToken['familyName'] ?? null;
-    }
-
-    /**
-     * Returns the given name.
-     *
-     * @return null|string
-     */
-    public function getGivenName():?string
-    {
-        return $this->authToken['givenName'] ?? null;
-    }
-
-    /**
-     * Returns the name.
-     *
-     * @return null|string
-     */
-    public function getName():?string
-    {
-        return $this->authToken['name'] ?? null;
-    }
-
-    /**
-     * Returns the locale.
-     *
-     * @return null|string
-     */
-    public function getLocale():?string
-    {
-        return $this->authToken['locale'] ?? null;
-    }
-
-    /**
-     * Returns the picture URL.
-     *
-     * @return null|string
-     */
-    public function getPicture():?string
-    {
-        return $this->authToken['picture'] ?? null;
-    }
-
-    /**
-     * Returns the auth token as an array.
-     *
+     * @throws \ReflectionException
      * @return array
      */
     public function toArray():array
     {
-        return $this->authToken;
+        $array = [];
+        foreach (array_keys((new \ReflectionClass($this))->getDefaultProperties()) as $property) {
+            $array[$property] = $this->{$property};
+        }
+        return $array;
+    }
+
+    /**
+     * Creates an auth token using an array;
+     *
+     * @param array $array
+     * @return AuthToken
+     * @throws AuthTokenException
+     * @throws \ReflectionException
+     */
+    public static function fromArray(array $array):AuthToken
+    {
+        if (!isset($array['googleId'])) {
+            throw new AuthTokenException('The \'googleId\' key is missing in the array');
+        }
+        if (!is_numeric($array['googleId'])) {
+            throw new AuthTokenException(sprintf('The Google ID \'%s\' is invalid', $array['googleId']));
+        }
+        $authToken =new AuthToken((int)$array['googleId']);
+        foreach (array_keys((new \ReflectionClass($authToken))->getDefaultProperties()) as $property) {
+            if (array_key_exists($property, $array)) {
+                $authToken->{$property} = $array[$property];
+            }
+        }
+        return $authToken;
+    }
+
+    /**
+     * @return int
+     */
+    public function getGoogleId():int
+    {
+        return $this->googleId;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getEmail():?string
+    {
+        return $this->email;
+    }
+
+    /**
+     * @param null|string $email
+     */
+    public function setEmail(?string $email):void
+    {
+        $this->email = $email;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isVerifiedEmail():bool
+    {
+        return $this->verifiedEmail;
+    }
+
+    /**
+     * @param bool $verifiedEmail
+     */
+    public function setVerifiedEmail(bool $verifiedEmail):void
+    {
+        $this->verifiedEmail = $verifiedEmail;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getGender():?string
+    {
+        return $this->gender;
+    }
+
+    /**
+     * @param null|string $gender
+     */
+    public function setGender(?string $gender):void
+    {
+        $this->gender = $gender;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getFamilyName():?string
+    {
+        return $this->familyName;
+    }
+
+    /**
+     * @param null|string $familyName
+     */
+    public function setFamilyName(?string $familyName):void
+    {
+        $this->familyName = $familyName;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getGivenName():?string
+    {
+        return $this->givenName;
+    }
+
+    /**
+     * @param null|string $givenName
+     */
+    public function setGivenName(?string $givenName):void
+    {
+        $this->givenName = $givenName;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getName():?string
+    {
+        return $this->name;
+    }
+
+    /**
+     * @param null|string $name
+     */
+    public function setName(?string $name):void
+    {
+        $this->name = $name;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getLocale():?string
+    {
+        return $this->locale;
+    }
+
+    /**
+     * @param null|string $locale
+     */
+    public function setLocale(?string $locale):void
+    {
+        $this->locale = $locale;
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getPicture():?string
+    {
+        return $this->picture;
+    }
+
+    /**
+     * @param null|string $picture
+     */
+    public function setPicture(?string $picture):void
+    {
+        $this->picture = $picture;
+    }
+
+    /**
+     * @return \DateTime
+     */
+    public function getExpiresAt():\DateTime
+    {
+        return new \DateTime($this->expiresAt);
+    }
+
+    /**
+     * @param \DateTime $expiresAt
+     */
+    public function setExpiresAt(\DateTime $expiresAt):void
+    {
+        $this->expiresAt = $expiresAt->format(\DateTime::ATOM);
+    }
+
+    /**
+     * Verifies if the auth token is expired.
+     *
+     * @return bool
+     */
+    public function isExpired():bool
+    {
+        return $this->getExpiresAt() <= (new \DateTime('now'));
+    }
+
+    /**
+     * @return null|string
+     */
+    public function getAppVersion():?string
+    {
+        return $this->appVersion;
+    }
+
+    /**
+     * @param null|string $appVersion
+     */
+    public function setAppVersion(?string $appVersion):void
+    {
+        $this->appVersion = $appVersion;
+    }
+
+    /**
+     * Validates the auth token version.
+     *
+     * @param string $appVersion
+     * @return bool
+     */
+    public function isOfVersion(string $appVersion):bool
+    {
+        return version_compare($appVersion, $this->appVersion, '==');
+    }
+
+    /**
+     * @param null|string $appVersion
+     * @return bool
+     */
+    public function isValid(?string $appVersion = null):bool
+    {
+        return (($appVersion === null || $this->isOfVersion($appVersion)) && !$this->isExpired());
     }
 
     /**
      * @inheritdoc
      * @return \ArrayIterator
+     * @throws \ReflectionException
      */
     public function getIterator():\ArrayIterator
     {
-        return new \ArrayIterator($this->authToken);
+        return new \ArrayIterator($this->toArray());
     }
-
-    /**
-     * @inheritdoc
-     * @param string|int $offset
-     */
-    public function offsetUnset($offset)
-    {
-        return;
-    }
-
-    /**
-     * @inheritdoc
-     * @param string|int $offset
-     * @param mixed $value
-     */
-    public function offsetSet($offset, $value)
-    {
-        return;
-    }
-
-    /**
-     * @inheritdoc
-     * @param string|int $offset
-     * @return mixed|null
-     */
-    public function offsetGet($offset)
-    {
-        return $this->authToken[$offset] ?? null;
-    }
-
-    /**
-     * @inheritdoc
-     * @param string|int $offset
-     * @return bool
-     */
-    public function offsetExists($offset):bool
-    {
-        return array_key_exists($offset, $this->authToken);
-    }
-
 }
