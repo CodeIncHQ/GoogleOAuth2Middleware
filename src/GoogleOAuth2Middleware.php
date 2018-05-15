@@ -222,10 +222,13 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     }
 
     /**
-     * @param ServerRequestInterface $request
+     * @inheritdoc
+     * @param ServerRequestInterface  $request
      * @param RequestHandlerInterface $handler
      * @return ResponseInterface
+     * @throws AuthTokenException
      * @throws GoogleOAuth2MiddlewareException
+     * @throws \ReflectionException
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler):ResponseInterface
     {
@@ -268,10 +271,11 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * Processes the Google OAuth requests. Returns the response if the request is a Google OAuth
      * request including an authentication code or null of other requests.
      *
-     * @param ServerRequestInterface $request
+     * @param ServerRequestInterface  $request
      * @param RequestHandlerInterface $handler
      * @return null|ResponseInterface
      * @throws GoogleOAuth2MiddlewareException
+     * @throws \ReflectionException
      */
     private function processGoogleOauthRequests(ServerRequestInterface $request,
         RequestHandlerInterface $handler):?ResponseInterface
@@ -298,39 +302,90 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
             }
 
             // processing the PSR-7 request with the auth token
-            $response = $handler->handle(
-                $request->withAttribute($this->requestAttrName, $authToken)
+            return $this->attachAuthTokenToResponse(
+                $handler->handle(
+                    $request->withAttribute($this->requestAttrName, $authToken)
+                ),
+                $authToken
             );
-
-            // adding the auth cookie to the PSR-7 response
-            if (!$response instanceof LogoutResponseInterface) {
-                $response = $this->getAuthCookie($authToken)->addToResponse($response);
-            }
-
-            return $response;
         }
         return null;
     }
 
     /**
-     * Proesses the authenticated requrests. Returns null if the request does not include the authentication cookie.
+     * Attaches the auth token to a response. The auth token is not attached to responses implementing the
+     * LogoutResponseInterface interface.
      *
-     * @param ServerRequestInterface $request
+     * @param ResponseInterface $response
+     * @param AuthToken         $authToken
+     * @return ResponseInterface
+     * @throws \ReflectionException
+     */
+    private function attachAuthTokenToResponse(ResponseInterface $response, AuthToken $authToken):ResponseInterface
+    {
+        if (!$response instanceof LogoutResponseInterface) {
+            return SetCookie::thatExpires(
+                $this->authCookieName,
+                JWT::encode($authToken->toArray(), $this->jwtKey, $this->jwtAlgo),
+                $authToken->getExpiresAt(),
+                $this->authCookiePath ?? '',
+                $this->authCookieDomain ?? '',
+                $this->authCookieSecure,
+                $this->authCookieHttpOnly
+            )->addToResponse($response);
+        }
+        else {
+            return SetCookie::thatDeletesCookie(
+                $this->authCookieName,
+                $this->authCookiePath ?? '',
+                $this->authCookieDomain ?? '',
+                $this->authCookieSecure,
+                $this->authCookieHttpOnly
+            )->addToResponse($response);
+        }
+    }
+
+    /**
+     * Processes the authenticated requrests. Returns null if the request does not include the authentication cookie.
+     *
+     * @param ServerRequestInterface  $request
      * @param RequestHandlerInterface $handler
      * @return null|ResponseInterface
+     * @throws AuthTokenException
+     * @throws \ReflectionException
      */
     private function processAuthenticatedRequests(ServerRequestInterface $request,
         RequestHandlerInterface $handler):?ResponseInterface
     {
-        if (($authTokenData = $this->readAuthCookie($request)) !== null) {
-            $response = $handler->handle(
-                $request->withAttribute($this->getRequestAttrName(), new AuthToken($authTokenData))
+        // if the auth token exists among the cookies
+        if (isset($request->getCookieParams()[$this->authCookieName])) {
+
+            // decoding the auth cookie
+            $authToken = JWT::decode(
+                $request->getCookieParams()[$this->authCookieName],
+                $this->jwtKey,
+                [$this->jwtAlgo]
             );
-            if ($response instanceof LogoutResponseInterface) {
-                $response = $this->getAuthDeleteCookie()->addToResponse($response);
+
+            // if the auth cookie contains a valid auth token
+            if (isset($authToken->googleId) && is_numeric($authToken->googleId)) {
+                $authToken = AuthToken::fromArray((array)$authToken);
+
+                // if the token is not expired and is valid for the current version
+                if ($authToken->isValid($this->appVersion)) {
+
+                    // processing the request
+                    return $this->attachAuthTokenToResponse(
+                        $handler->handle(
+                            $request->withAttribute($this->getRequestAttrName(), $authToken)
+                        ),
+                        $authToken
+                    );
+                }
             }
-            return $response;
+
         }
+
         return null;
     }
 
@@ -376,28 +431,28 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      */
     private function buildAuthToken(\Google_Service_Oauth2_Userinfoplus $googleUserInfos):AuthToken
     {
-        $authTokenData = ['googleId' => $googleUserInfos->getId()];
+        $authToken = new AuthToken((int)$googleUserInfos->getId(), $this->getAppVersion());
 
         if ($this->authTokenIncludeEmail) {
-            $authTokenData['email'] = $googleUserInfos->getEmail();
-            $authTokenData['verifiedEmail'] = $googleUserInfos->getVerifiedEmail();
+            $authToken->setEmail($googleUserInfos->getEmail());
+            $authToken->setVerifiedEmail($googleUserInfos->getVerifiedEmail());
         }
         if ($this->authTokenIncludeGender) {
-            $authTokenData['gender'] = $googleUserInfos->getGender();
+            $authToken->setGender($googleUserInfos->getGender());
         }
         if ($this->authTokenIncludeName) {
-            $authTokenData['familyName'] = $googleUserInfos->getFamilyName();
-            $authTokenData['givenName'] = $googleUserInfos->getGivenName();
-            $authTokenData['name'] = $googleUserInfos->getName();
+            $authToken->setFamilyName($googleUserInfos->getFamilyName());
+            $authToken->setGivenName($googleUserInfos->getGivenName());
+            $authToken->setName($googleUserInfos->getName());
         }
         if ($this->authTokenIncludeLocale) {
-            $authTokenData['locale'] = $googleUserInfos->getLocale();
+            $authToken->setLocale($googleUserInfos->getLocale());
         }
         if ($this->authTokenIncludePicture) {
-            $authTokenData['picture'] = $googleUserInfos->getPicture();
+            $authToken->setPicture($googleUserInfos->getPicture());
         }
 
-        return new AuthToken($authTokenData);
+        return $authToken;
     }
 
     /**
@@ -427,96 +482,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
                 $this, 0, $exception
             );
         }
-    }
-
-    /**
-     * Encodes a JSON web token with the current class paraemters.
-     *
-     * @param array $data
-     * @return string
-     */
-    public function encodeJwt(array $data):string
-    {
-        return JWT::encode($data, $this->jwtKey, $this->jwtAlgo);
-    }
-
-    /**
-     * Decodes a JSON web token with the current class parameters. Returns NULL if the token can not
-     * be decoded.
-     *
-     * @param string $jwt
-     * @return array|null
-     */
-    public function decodeJwt(string $jwt):?array
-    {
-        try {
-            if (($jwtData = JWT::decode($jwt, $this->jwtKey, [$this->jwtAlgo])) !== null) {
-                return (array)$jwtData;
-            }
-        }
-        catch (\Exception $exception) { }
-        return null;
-    }
-
-    /**
-     * Reads the auth cookie.
-     *
-     * @param ServerRequestInterface $request
-     * @return array|null
-     */
-    protected function readAuthCookie(ServerRequestInterface $request):?array
-    {
-        if (isset($request->getCookieParams()[$this->authCookieName])
-            && ($authToken = $this->decodeJwt($request->getCookieParams()[$this->authCookieName])) !== null
-            && isset($authToken['_expireAt'], $authToken['_appVersion'])
-            && ($this->appVersion === null || $authToken['_appVersion'] == $this->appVersion)) {
-
-            $expireAt = new \DateTime($authToken['_expireAt']);
-            if ($expireAt > (new \DateTime('now'))) {
-                return $authToken;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * @param AuthToken $authToken
-     * @return SetCookie
-     */
-    protected function getAuthCookie(AuthToken $authToken):SetCookie
-    {
-        // computing expiration time
-        $expireAt = new \DateTime('now');
-        $expireAt->add($this->authExpire);
-
-        // adding headers
-        $authToken['_expireAt'] = $expireAt->format(\DateTime::W3C);
-        $authToken['_appVersion'] = $this->getAppVersion();
-
-        // building the cookie
-        return SetCookie::thatExpires(
-            $this->authCookieName,
-            $this->encodeJwt($authToken->toArray()),
-            $expireAt,
-            $this->authCookiePath ?? '',
-            $this->authCookieDomain ?? '',
-            $this->authCookieSecure,
-            $this->authCookieHttpOnly
-        );
-    }
-
-    /**
-     * @return SetCookie
-     */
-    protected function getAuthDeleteCookie():SetCookie
-    {
-        return SetCookie::thatDeletesCookie(
-            $this->authCookieName,
-            $this->authCookiePath ?? '',
-            $this->authCookieDomain ?? '',
-            $this->authCookieSecure,
-            $this->authCookieHttpOnly
-        );
     }
 
     /**
