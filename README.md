@@ -17,7 +17,7 @@ use CodeInc\GoogleOAuth2Middleware\GoogleOAuth2Middleware;
 use CodeInc\GoogleOAuth2Middleware\AuthTokenStorage\JwtStorageDriver;
 
 $googleOAuth2Middleware = new GoogleOAuth2Middleware(
-    // a fully configures Google client (the client redirect URI must be set)
+    // a fully configured Google client (the client redirect URI must be set)
     new Google_Client(), 
     
     // storing the auth token using a JWT cookie
