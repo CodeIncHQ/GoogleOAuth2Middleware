@@ -2,7 +2,7 @@
 
 `GoogleOAuth2Middleware` is a [PSR-15](https://www.php-fig.org/psr/psr-15/) middleware written in PHP 7 intended to manage Google OAuth2 authentication using JSON web tokens. The JSON web tokens are generated and read by the [Firebase JWT implementation](https://github.com/firebase/php-jwt). The interactions with Google are made using the [Google API PHP client](https://github.com/google/google-api-php-client).
 
-The authentication informations are stored using a storage driver either in a JSON web token cookie using `JwtStorageDriver` or in the PHP session using `SessionStorageDriver`. You can add your own storage drivers by implementing `AuthTokenStorageDriverInterface`. 
+The authentication informations ([`AuthToken`](src/AuthToken.php) object) are stored using a storage driver class (implementing [`AuthTokenStorageDriverInterface`](src/AuthTokenStorage/AuthTokenStorageDriverInterface.php)) either in a JSON web token cookie using [`JwtStorageDriver`](src/AuthTokenStorage/JwtStorageDriver.php) or in the PHP session (`$_SESSION` array) using [`SessionStorageDriver`](src/AuthTokenStorage/SessionStorageDriver.php).  
 
 Once the user is authenticated, either when receiving an auth code from Google or using the auth cookie, the user informations are made available in an attribute of the [PSR-7](https://www.php-fig.org/psr/psr-7/) request the called `auth` (by default).
 
