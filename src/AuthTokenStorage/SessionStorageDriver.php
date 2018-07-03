@@ -22,6 +22,7 @@
 declare(strict_types=1);
 namespace CodeInc\GoogleOAuth2Middleware\AuthTokenStorage;
 use CodeInc\GoogleOAuth2Middleware\AuthToken;
+use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -48,6 +49,25 @@ class SessionStorageDriver implements AuthTokenStorageDriverInterface
      */
     public function __construct(string $sessionKey = self::DEFAULT_SESSION_KEY)
     {
+        $this->setSessionKey($sessionKey);
+    }
+
+    /**
+     * @return string
+     */
+    public function getSessionKey():string
+    {
+        return $this->sessionKey;
+    }
+
+    /**
+     * @param string $sessionKey
+     */
+    public function setSessionKey(string $sessionKey):void
+    {
+        if (empty($sessionKey)) {
+            throw new InvalidArgumentException("The session key can not be empty");
+        }
         $this->sessionKey = $sessionKey;
     }
 
