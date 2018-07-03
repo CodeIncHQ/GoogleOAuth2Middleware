@@ -21,14 +21,13 @@
 //
 declare(strict_types=1);
 namespace CodeInc\GoogleOAuth2Middleware;
+use CodeInc\GoogleOAuth2Middleware\AuthTokenStorage\AuthTokenStorageDriverInterface;
 use CodeInc\GoogleOAuth2Middleware\Validators\PublicRequests\PublicRequestValidatorInterface;
 use CodeInc\GoogleOAuth2Middleware\Responses\LogoutResponseInterface;
 use CodeInc\GoogleOAuth2Middleware\Validators\Users\UserValidatorInterface;
 use CodeInc\Psr7Responses\RedirectResponse;
 use CodeInc\Psr7Responses\UnauthorizedResponse;
 use CodeInc\Url\Url;
-use Firebase\JWT\JWT;
-use HansOtt\PSR7Cookies\SetCookie;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -45,50 +44,9 @@ use Psr\Http\Server\RequestHandlerInterface;
  */
 class GoogleOAuth2Middleware implements MiddlewareInterface
 {
-    // auth cookie default settings
-    const DEFAULT_AUTH_COOKIE_NAME = '__auth';
-    const DEFAULT_AUTH_COOKIE_SECURE = false;
-    const DEFAULT_AUTH_COOKIE_HTTP_ONLY = false;
-
     // other default settings
     const DEFAULT_AUTH_EXPIRE = '30 minutes';
-    const DEFAULT_JWT_ALGO = 'HS256'; // see https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-40
     const DEFAULT_REQUEST_ATTR_NAME = 'auth';
-
-    /**
-     * Name of the auth cookie
-     *
-     * @var string
-     */
-    private $authCookieName = self::DEFAULT_AUTH_COOKIE_NAME;
-
-    /**
-     * Cookies domain
-     *
-     * @var string|null
-     */
-    private $authCookieDomain;
-
-    /**
-     * Cookies path.
-     *
-     * @var string|null
-     */
-    private $authCookiePath;
-
-    /**
-     * Cookies secure.
-     *
-     * @var bool
-     */
-    private $authCookieSecure = self::DEFAULT_AUTH_COOKIE_SECURE;
-
-    /**
-     * Cookies HTTP only.
-     *
-     * @var bool
-     */
-    private $authCookieHttpOnly = self::DEFAULT_AUTH_COOKIE_HTTP_ONLY;
 
     /**
      * Auth expire.
@@ -96,20 +54,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * @var \DateInterval
      */
     private $authExpire;
-
-    /**
-     *JSON web token encryption key.
-     *
-     * @var string
-     */
-    private $jwtKey;
-
-    /**
-     * JSON web token encryption algorithme.
-     *
-     * @var string
-     */
-    private $jwtAlgo = self::DEFAULT_JWT_ALGO;
 
     /**
      * Attribute name added to the PSR-7 request object for the authentication infos.
@@ -169,6 +113,11 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     private $publicRequestValidators = [];
 
     /**
+     * @var AuthTokenStorageDriverInterface
+     */
+    private $authTokenStorageDriver;
+
+    /**
      * Includes the picture in the auth token.
      *
      * @var bool
@@ -207,16 +156,16 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * GoogleOAuth2Middleware constructor.
      *
      * @param \Google_Client $googleClient
-     * @param string $jwtKey
+     * @param AuthTokenStorageDriverInterface $authTokenStorageDriver
      * @param string $oauthCallbackUri
      * @param \DateInterval|null $authExpire
      */
-    public function __construct(\Google_Client $googleClient, string $jwtKey, string $oauthCallbackUri,
-        ?\DateInterval $authExpire = null)
+    public function __construct(\Google_Client $googleClient, AuthTokenStorageDriverInterface $authTokenStorageDriver,
+        string $oauthCallbackUri, ?\DateInterval $authExpire = null)
     {
         $this->googleClient = $googleClient;
         $this->googleClient->setRedirectUri($oauthCallbackUri);
-        $this->jwtKey = $jwtKey;
+        $this->authTokenStorageDriver = $authTokenStorageDriver;
         $this->oauthCallbackUri = $oauthCallbackUri;
         $this->authExpire = $authExpire ?? \DateInterval::createFromDateString(self::DEFAULT_AUTH_EXPIRE);
     }
@@ -226,9 +175,7 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * @param ServerRequestInterface  $request
      * @param RequestHandlerInterface $handler
      * @return ResponseInterface
-     * @throws AuthTokenException
      * @throws GoogleOAuth2MiddlewareException
-     * @throws \ReflectionException
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler):ResponseInterface
     {
@@ -275,7 +222,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * @param RequestHandlerInterface $handler
      * @return null|ResponseInterface
      * @throws GoogleOAuth2MiddlewareException
-     * @throws \ReflectionException
      */
     private function processGoogleOauthRequests(ServerRequestInterface $request,
         RequestHandlerInterface $handler):?ResponseInterface
@@ -319,32 +265,19 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * @param ResponseInterface $response
      * @param AuthToken         $authToken
      * @return ResponseInterface
-     * @throws \ReflectionException
      */
     private function attachAuthTokenToResponse(ResponseInterface $response, AuthToken $authToken):ResponseInterface
     {
+        // updates the auth token
         if (!$response instanceof LogoutResponseInterface) {
             $authToken = clone $authToken;
             $authToken->updateExpiresAt($this->authExpire);
-
-            return SetCookie::thatExpires(
-                $this->authCookieName,
-                JWT::encode($authToken->toArray(), $this->jwtKey, $this->jwtAlgo),
-                $authToken->getExpiresAt(),
-                $this->authCookiePath ?? '',
-                $this->authCookieDomain ?? '',
-                $this->authCookieSecure,
-                $this->authCookieHttpOnly
-            )->addToResponse($response);
+            return $this->authTokenStorageDriver->saveAuthToken($authToken, $response);
         }
+
+        // deletes the auth token
         else {
-            return SetCookie::thatDeletesCookie(
-                $this->authCookieName,
-                $this->authCookiePath ?? '',
-                $this->authCookieDomain ?? '',
-                $this->authCookieSecure,
-                $this->authCookieHttpOnly
-            )->addToResponse($response);
+            return $this->authTokenStorageDriver->deleteAuthToken($response);
         }
     }
 
@@ -354,39 +287,25 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
      * @param ServerRequestInterface  $request
      * @param RequestHandlerInterface $handler
      * @return null|ResponseInterface
-     * @throws AuthTokenException
-     * @throws \ReflectionException
      */
     private function processAuthenticatedRequests(ServerRequestInterface $request,
         RequestHandlerInterface $handler):?ResponseInterface
     {
         // if the auth token exists among the cookies
-        if (isset($request->getCookieParams()[$this->authCookieName])) {
+        $authToken = $this->authTokenStorageDriver->getAuthToken($request);
+        if ($authToken)
+        {
+            // if the token is not expired and is valid for the current version
+            if ($authToken->isValid($this->appVersion)) {
 
-            // decoding the auth cookie
-            $authToken = JWT::decode(
-                $request->getCookieParams()[$this->authCookieName],
-                $this->jwtKey,
-                [$this->jwtAlgo]
-            );
-
-            // if the auth cookie contains a valid auth token
-            if (isset($authToken->googleId) && is_numeric($authToken->googleId)) {
-                $authToken = AuthToken::fromArray((array)$authToken);
-
-                // if the token is not expired and is valid for the current version
-                if ($authToken->isValid($this->appVersion)) {
-
-                    // processing the request
-                    return $this->attachAuthTokenToResponse(
-                        $handler->handle(
-                            $request->withAttribute($this->getRequestAttrName(), $authToken)
-                        ),
-                        $authToken
-                    );
-                }
+                // processing the request
+                return $this->attachAuthTokenToResponse(
+                    $handler->handle(
+                        $request->withAttribute($this->getRequestAttrName(), $authToken)
+                    ),
+                    $authToken
+                );
             }
-
         }
 
         return null;
@@ -503,102 +422,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
         return false;
     }
 
-    /**
-     * @return string
-     */
-    public function getJwtAlgo():string
-    {
-        return $this->jwtAlgo;
-    }
-
-    /**
-     * @see https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-40
-     * @param string $jwtAlgo
-     */
-    public function setJwtAlgo(string $jwtAlgo):void
-    {
-        $this->jwtAlgo = $jwtAlgo;
-    }
-
-    /**
-     * @return string|null
-     */
-    public function getAuthCookieDomain():?string
-    {
-        return $this->authCookieDomain;
-    }
-
-    /**
-     * @param string $authCookieDomain
-     */
-    public function setAuthCookieDomain(string $authCookieDomain):void
-    {
-        $this->authCookieDomain = $authCookieDomain;
-    }
-
-    /**
-     * @return string|null
-     */
-    public function getAuthCookiePath():string
-    {
-        return $this->authCookiePath;
-    }
-
-    /**
-     * @return bool
-     */
-    public function getAuthCookieHttpOnly():bool
-    {
-        return $this->authCookieHttpOnly;
-    }
-
-    /**
-     * @param bool $authCookieHttpOnly
-     */
-    public function setAuthCookieHttpOnly(bool $authCookieHttpOnly):void
-    {
-        $this->authCookieHttpOnly = $authCookieHttpOnly;
-    }
-
-    /**
-     * @return bool
-     */
-    public function getAuthCookieSecure():bool
-    {
-        return $this->authCookieSecure;
-    }
-
-    /**
-     * @param bool $authCookieSecure
-     */
-    public function setAuthCookieSecure(bool $authCookieSecure):void
-    {
-        $this->authCookieSecure = $authCookieSecure;
-    }
-
-    /**
-     * @param string $authCookiePath
-     */
-    public function setAuthCookiePath(string $authCookiePath):void
-    {
-        $this->authCookiePath = $authCookiePath;
-    }
-
-    /**
-     * @return string
-     */
-    public function getAuthCookieName():string
-    {
-        return $this->authCookieName;
-    }
-
-    /**
-     * @param string $authCookieName
-     */
-    public function setAuthCookieName(string $authCookieName):void
-    {
-        $this->authCookieName = $authCookieName;
-    }
 
     /**
      * @param \DateInterval $authExpire
@@ -606,15 +429,6 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function setAuthExpire(\DateInterval $authExpire):void
     {
         $this->authExpire = $authExpire;
-    }
-
-
-    /**
-     * @return string
-     */
-    public function getJwtKey():string
-    {
-        return $this->jwtKey;
     }
 
     /**
@@ -719,6 +533,14 @@ class GoogleOAuth2Middleware implements MiddlewareInterface
     public function getOauthCallbackUri():string
     {
         return $this->oauthCallbackUri;
+    }
+
+    /**
+     * @return \DateInterval
+     */
+    public function getAuthExpire():\DateInterval
+    {
+        return $this->authExpire;
     }
 
     /**
