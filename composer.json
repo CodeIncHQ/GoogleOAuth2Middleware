@@ -1,6 +1,6 @@
 {
   "name": "codeinc/google-oauth2-middleware",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "A PSR-15 middleware managing Google OAuth2 authentication using JSON web tokens",
   "homepage": "https://github.com/CodeIncHQ/GoogleOAuth2Middleware",
   "type": "library",
@@ -13,7 +13,7 @@
     "hansott/psr7-cookies": "^1.0",
     "google/apiclient": "^2.0",
     "firebase/php-jwt": "^5.0",
-    "codeinc/psr7-responses": "^1.2",
+    "codeinc/psr7-responses": "^2",
     "codeinc/url": "^1.4"
   },
   "require-dev": {
